@@ -1,7 +1,7 @@
 // Service worker: precaches the whole app so it runs fully offline.
 // Bump CACHE_VERSION whenever you deploy changed files.
 
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v5';
 const CACHE_NAME = `number-merge-${CACHE_VERSION}`;
 
 const ASSETS = [

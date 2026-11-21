@@ -14,13 +14,15 @@ const ui = {
   area: $('board-area'),
   board: $('board'),
   queue: $('queue'),
+  hintTitle: $('mode-hint-title'),
+  hintText: $('mode-hint-text'),
   current: $('current-tile'),
   next: $('next-tile'),
   btnNew: $('btn-new'),
   btnBomb: $('btn-bomb'),
   btnBombLabel: $('btn-bomb-label'),
-  btnSound: $('btn-sound'),
-  btnSoundLabel: $('btn-sound-label'),
+  btnMove: $('btn-move'),
+  btnMoveLabel: $('btn-move-label'),
   confirm: $('confirm'),
   confirmOk: $('confirm-ok'),
   confirmCancel: $('confirm-cancel'),
@@ -33,9 +35,10 @@ const ui = {
 };
 
 const controller = new GameController({ storage: createStorage(getLocalStorage()) });
-const sound = new SoundFX(controller.settings.sound);
+// Sound effects and music are always on (no settings).
+const sound = new SoundFX(true);
 const music = new MusicPlayer(sound, 'audio/music.mp3');
-music.enabled = controller.settings.music; // starts on the first tap
+music.held = controller.isWon; // reopening on the win screen: stay silent
 const renderer = new Renderer({
   area: ui.area,
   board: ui.board,
@@ -47,21 +50,36 @@ const renderer = new Renderer({
 // ---------- view refresh ----------
 
 function refreshControls() {
-  const { bombMode, busy } = controller;
+  const { bombMode, moveMode, busy } = controller;
   const empty = isBoardEmpty(controller.game.grid);
+
   ui.btnBomb.disabled = controller.isEnded || (empty && !bombMode);
   ui.btnBomb.classList.toggle('active', bombMode);
   ui.btnBomb.setAttribute('aria-pressed', String(bombMode));
   ui.btnBombLabel.textContent = bombMode ? 'BATAL' : 'BOM';
+
+  ui.btnMove.disabled = controller.isEnded || (empty && !moveMode);
+  ui.btnMove.classList.toggle('active', moveMode);
+  ui.btnMove.setAttribute('aria-pressed', String(moveMode));
+  ui.btnMoveLabel.textContent = moveMode ? 'BATAL' : 'MOVE';
+
   ui.board.classList.toggle('bomb-mode', bombMode);
+  ui.board.classList.toggle('move-mode', moveMode);
   ui.board.classList.toggle('busy', busy);
   ui.queue.classList.toggle('bomb-mode', bombMode);
+  ui.queue.classList.toggle('move-mode', moveMode);
 
-  const { sound: sfxOn, music: musicOn } = controller.settings;
-  ui.btnSound.classList.toggle('off', !sfxOn);
-  ui.btnSound.classList.toggle('no-music', sfxOn && !musicOn);
-  ui.btnSound.setAttribute('aria-pressed', String(sfxOn));
-  ui.btnSoundLabel.textContent = !sfxOn ? 'SUARA OFF' : musicOn ? 'SUARA ON' : 'MUSIK OFF';
+  if (bombMode) {
+    ui.hintTitle.textContent = 'MODE BOM';
+    ui.hintText.textContent = 'Ketuk balok yang ingin dihancurkan';
+  } else if (moveMode) {
+    ui.hintTitle.textContent = 'MODE MOVE';
+    ui.hintText.textContent =
+      controller.moveFrom === null
+        ? 'Ketuk kolom asal: balok paling atas akan diangkat'
+        : 'Ketuk kolom tujuan (ketuk kolom asal untuk batal pilih)';
+  }
+  renderer.setMoveState(controller.game.grid, busy ? null : controller.move);
 }
 
 function showEndScreen() {
@@ -86,6 +104,12 @@ function renderAll() {
   showEndScreen();
 }
 
+function nudgeHint() {
+  ui.queue.classList.remove('nudge');
+  void ui.queue.offsetWidth;
+  ui.queue.classList.add('nudge');
+}
+
 // ---------- action playback ----------
 
 async function playSteps(steps) {
@@ -102,6 +126,7 @@ async function playSteps(steps) {
   if (controller.epoch !== epoch) {
     // New Game was started mid-animation: show the fresh board.
     renderer.sync(controller.game.grid);
+    refreshControls();
     return;
   }
   controller.finishAnimation();
@@ -109,6 +134,7 @@ async function playSteps(steps) {
   refreshPreview(true);
   refreshControls();
   if (controller.isWon) {
+    music.hold(true); // stop the music on the win screen
     sound.play('win');
     showEndScreen();
     ui.winNew.focus({ preventScroll: true });
@@ -120,7 +146,7 @@ async function playSteps(steps) {
 }
 
 function tryDrop(col) {
-  if (controller.busy || controller.isEnded || controller.bombMode) return;
+  if (controller.busy || controller.isEnded || controller.bombMode || controller.moveMode) return;
   const res = controller.drop(col);
   if (!res.ok) {
     if (res.reason === 'column-full') {
@@ -140,18 +166,48 @@ function tryBomb(col, row) {
   if (!res.ok) {
     // Empty cell: bomb is not used and bomb mode stays active.
     sound.play('error');
-    ui.queue.classList.remove('nudge');
-    void ui.queue.offsetWidth;
-    ui.queue.classList.add('nudge');
+    nudgeHint();
     return;
   }
   playSteps(res.steps);
+}
+
+function tryMove(col) {
+  if (controller.busy || !controller.moveMode) return;
+  const res = controller.moveSelect(col);
+  if (!res.ok) {
+    // Empty source column or full destination: nothing moves, mode stays.
+    sound.play('error');
+    if (res.reason === 'column-full') renderer.denyLane(col);
+    nudgeHint();
+    return;
+  }
+  if (res.action === 'moved') {
+    renderer.setHoverLane(-1);
+    playSteps(res.steps);
+    return;
+  }
+  sound.play('click'); // picked / unpicked
+  refreshControls();
 }
 
 function toggleBomb() {
   if (controller.busy || controller.isEnded) return;
   controller.toggleBombMode();
   sound.play('click');
+  refreshControls();
+}
+
+function toggleMove() {
+  if (controller.busy || controller.isEnded) return;
+  controller.toggleMoveMode();
+  sound.play('click');
+  refreshControls();
+}
+
+function cancelModes() {
+  controller.cancelBombMode();
+  controller.cancelMoveMode();
   refreshControls();
 }
 
@@ -164,6 +220,7 @@ function startNewGame() {
   ui.win.hidden = true;
   refreshPreview(true);
   refreshControls();
+  music.hold(false); // music plays again (restarts after a win)
 }
 
 function requestNewGame() {
@@ -173,8 +230,7 @@ function requestNewGame() {
     startNewGame();
     return;
   }
-  controller.cancelBombMode();
-  refreshControls();
+  cancelModes();
   ui.confirm.hidden = false;
   ui.confirmCancel.focus({ preventScroll: true });
 }
@@ -190,6 +246,7 @@ ui.board.addEventListener('pointerdown', (e) => {
   const cell = renderer.cellFromPoint(e.clientX, e.clientY);
   if (!cell) return;
   if (controller.bombMode) tryBomb(cell.col, cell.row);
+  else if (controller.moveMode) tryMove(cell.col);
   else tryDrop(cell.col);
 });
 
@@ -202,14 +259,8 @@ ui.board.addEventListener('pointerleave', () => renderer.setHoverLane(-1));
 ui.board.addEventListener('contextmenu', (e) => e.preventDefault());
 
 ui.btnBomb.addEventListener('click', toggleBomb);
+ui.btnMove.addEventListener('click', toggleMove);
 ui.btnNew.addEventListener('click', requestNewGame);
-ui.btnSound.addEventListener('click', () => {
-  const s = controller.cycleAudio();
-  sound.setEnabled(s.sound);
-  music.setEnabled(s.music);
-  sound.play('click');
-  refreshControls();
-});
 
 ui.confirmOk.addEventListener('click', () => {
   sound.play('click');
@@ -245,30 +296,35 @@ document.addEventListener('visibilitychange', () => {
   const ctx = sound.ctx;
   if (!ctx) return;
   if (document.hidden) ctx.suspend().catch(() => {});
-  else if (controller.settings.sound || controller.settings.music) ctx.resume().catch(() => {});
+  else ctx.resume().catch(() => {});
 });
 
-// Desktop shortcuts: 1-5 drop, B toggles bomb, Esc cancels bomb / dialog.
+// Desktop shortcuts: 1-5 drop / pick column, B bomb, M move, Esc cancel.
 document.addEventListener('keydown', (e) => {
   if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
   if (!ui.confirm.hidden) {
     if (e.key === 'Escape') ui.confirm.hidden = true;
     return;
   }
+  sound.unlock();
+  music.unlock();
   const n = Number(e.key);
   if (Number.isInteger(n) && n >= 1 && n <= COLS) {
-    sound.unlock();
-    music.unlock();
-    tryDrop(n - 1);
+    if (controller.moveMode) tryMove(n - 1);
+    else tryDrop(n - 1);
   } else if (e.key === 'b' || e.key === 'B') {
     toggleBomb();
-  } else if (e.key === 'Escape' && controller.bombMode) {
-    controller.cancelBombMode();
-    refreshControls();
+  } else if (e.key === 'm' || e.key === 'M') {
+    toggleMove();
+  } else if (e.key === 'Escape') {
+    cancelModes();
   }
 });
 
 // ---------- boot ----------
+
+// Read-only handle for tests/ui.html (no effect on gameplay).
+window.numberMerge = { controller, music };
 
 new ResizeObserver(() => renderer.layout()).observe(ui.area);
 renderer.layout();

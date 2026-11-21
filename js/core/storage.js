@@ -1,10 +1,9 @@
 // LocalStorage adapter. Every access is guarded: private mode, quota errors
 // or corrupted JSON fall back silently to a fresh game.
 
-import { serializeGame, deserializeGame, sanitizeSettings } from './persistence.js';
+import { serializeGame, deserializeGame } from './persistence.js';
 
 export const GAME_KEY = 'numberMerge.game.v1';
-export const SETTINGS_KEY = 'numberMerge.settings.v1';
 
 export function getLocalStorage() {
   try {
@@ -58,7 +57,5 @@ export function createStorage(backend) {
         /* ignore */
       }
     },
-    loadSettings: () => sanitizeSettings(readJSON(backend, SETTINGS_KEY)),
-    saveSettings: (settings) => writeJSON(backend, SETTINGS_KEY, sanitizeSettings(settings)),
   };
 }

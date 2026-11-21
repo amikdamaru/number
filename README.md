@@ -5,8 +5,8 @@ Game puzzle angka **Drop & Merge** untuk penggunaan pribadi. Berbentuk Progressi
 - 5 kolom × 7 baris, multi-block merge (`N` balok bernilai `V` → `V × 2^(N-1)`), chain merge otomatis
 - **Menang** saat berhasil membuat balok **16K (16384) atau lebih**. Setelah itu permainan selesai.
 - Angka sampai 8192 ditulis lengkap. Di atasnya pakai singkatan: 16K, 32K, … 512K, 1M, …
-- Bom tanpa batas, auto save, continue game
-- Musik latar + efek suara. Tombol SUARA berputar: Semua ON → Musik OFF → Semua OFF
+- Bom dan Move tanpa batas, auto save, continue game
+- Musik latar + efek suara (selalu aktif). Musik berhenti di layar menang dan diputar lagi saat New Game
 - Tanpa skor, tanpa login, tanpa backend, tanpa dependency, dan **tanpa proses build**
 
 ## Menjalankan secara lokal
@@ -27,15 +27,15 @@ Project ini berupa file statis biasa (HTML + CSS + JavaScript ES modules), jadi 
 - **Ketuk kolom**: jatuhkan balok "Sekarang"
 - **BOM**: masuk mode bom, lalu ketuk satu balok untuk menghancurkannya. Ketuk BOM lagi (BATAL) untuk membatalkan.
 - **NEW GAME**: mulai ulang (dengan konfirmasi)
-- **SUARA**: ketuk untuk berganti mode: Semua ON → Musik OFF → Semua OFF
-- Keyboard (desktop): `1`–`5` drop, `B` bom, `Esc` batal
+- **MOVE**: ketuk MOVE, ketuk kolom asal (balok paling atasnya terangkat), lalu ketuk kolom tujuan. Ketuk kolom asal lagi untuk batal pilih, atau ketuk MOVE (BATAL) untuk keluar. Balok yang dipindah bisa langsung merge/chain.
+- Keyboard (desktop): `1`–`5` drop / pilih kolom, `B` bom, `M` move, `Esc` batal
 
 ## Testing
 
 Jalankan server lokal, lalu buka di browser:
 
-- `tests/index.html`: 55 unit test (engine, connected components, gravitasi, rumus merge, chain, bom, game over, menang 16K, label angka, generator berbasis rekor, save/load, siklus suara/musik, fuzz 3000 langkah acak)
-- `tests/ui.html`: 43–44 test end-to-end di aplikasi asli (input sentuh, double tap, bom, game over, layar menang, new game, auto save, continue, siklus tombol suara, file musik, layout, cache offline)
+- `tests/index.html`: 64 unit test (engine, connected components, gravitasi, rumus merge, chain, bom, move, game over, menang 16K, label angka, generator berbasis rekor, save/load, fuzz 3000 langkah acak)
+- `tests/ui.html`: sekitar 51 test end-to-end di aplikasi asli (input sentuh, double tap, bom, move, game over, layar menang + musik berhenti, new game, auto save, continue, file musik, layout, cache offline)
 - `tests/offline.html`: memeriksa isi cache offline service worker
 - `tests/sim.html`: bot memainkan banyak game dan melaporkan berapa drop/bom yang dibutuhkan untuk menang (untuk menyetel kesulitan)
 
@@ -99,7 +99,7 @@ tests/                  Unit test & UI test
 
 ## Musik
 
-Musik latar: `audio/music.mp3` (disediakan oleh pemilik project). Pemutar otomatis melewati jeda hening di awal/akhir file MP3 agar loop mulus.
+Musik latar: `audio/music.mp3` (disediakan oleh pemilik project). File diputar berulang apa adanya, termasuk jeda hening di awal/akhir file.
 
 ## Menyesuaikan
 
@@ -109,4 +109,3 @@ Musik latar: `audio/music.mp3` (disediakan oleh pemilik project). Pemutar otomat
 - **Probabilitas angka**: `SPAWN_CONFIG.tiers` di `js/engine/generator.js`. Peluang setiap angka mengikuti **rekor** (angka tertinggi yang pernah di-merge di game itu; tidak turun walau baloknya dibom). Semakin tinggi rekor, balok 2 dan 4 makin jarang dan balok besar makin sering. Setelah mengubah tabel, jalankan `tests/sim.html` untuk melihat efeknya.
 - **Ukuran papan**: `COLS` / `ROWS` di `js/engine/config.js` (save lama otomatis diabaikan bila ukurannya berbeda)
 - **Warna balok**: `PALETTE` di `js/ui/tiles.js`
-- **Suara/musik default**: `DEFAULT_SETTINGS` di `js/core/controller.js`

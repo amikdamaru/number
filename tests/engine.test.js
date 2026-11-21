@@ -9,7 +9,7 @@ import {
   countBlocks,
   landingRow,
 } from '../js/engine/board.js';
-import { createGame, dropBlock, bombBlock } from '../js/engine/game.js';
+import { createGame, dropBlock, bombBlock, moveBlock } from '../js/engine/game.js';
 import { generateValue, spawnTable, spawnTier, spawnOdds, seededRng } from '../js/engine/generator.js';
 import { formatValue } from '../js/ui/tiles.js';
 
@@ -281,6 +281,47 @@ test('no false game over when the last cell merges away', () => {
   const res = dropBlock(stateFrom(nearlyFull(), 8), 4, rng);
   assertEqual(res.state.status, STATUS.PLAYING);
   checkInvariants(res.state.grid);
+});
+
+// ---------- move ----------
+
+test("move: top block goes onto the top of the target column", () => {
+  const res = moveBlock(stateFrom([[2, 4], [16]]), 0, 1);
+  assert(res.ok);
+  assertEqual(values(res.state.grid), [[2], [16, 4], [], [], []]);
+  assertEqual(res.steps[0].type, "move");
+  assertEqual([res.steps[0].from, res.steps[0].to], [{ col: 0, row: 1 }, { col: 1, row: 1 }]);
+});
+
+test("move: moved block merges (multi-block) at its new position", () => {
+  // move 2 from col0 next to two 2s → 3 blocks → 8 at the moved position
+  const res = moveBlock(stateFrom([[16, 2], [], [2], [2]]), 0, 1);
+  assertEqual(values(res.state.grid), [[16], [8], [], [], []]);
+  assertEqual(res.steps.filter((s) => s.type === 'merge')[0].merges[0].target, { col: 1, row: 0 });
+});
+
+test("move: chain merge after move", () => {
+  // 4 moved onto 4 → 8, falls next to 8 → 16, sits on 16 → 32
+  const res = moveBlock(stateFrom([[2, 8], [16, 4], [], [4]]), 3, 1);
+  assertEqual(values(res.state.grid), [[2], [32], [], [], []]);
+  assertEqual(res.chains, 3);
+});
+
+test("move: invalid moves are rejected without changes", () => {
+  const s = stateFrom([[2], [4, 8, 16, 32, 64, 128, 256]]);
+  assertEqual(moveBlock(s, 0, 0).reason, "same-column");
+  assertEqual(moveBlock(s, 2, 0).reason, "empty-column");
+  assertEqual(moveBlock(s, 0, 1).reason, "column-full");
+  assertEqual(moveBlock(s, 0, 9).reason, "invalid-column");
+  assertEqual(moveBlock({ ...s, status: STATUS.WON }, 0, 2).reason, "game-won");
+});
+
+test("move: does not consume current/next, updates record, can win", () => {
+  const s = stateFrom([[8192], [], [8192]], 4, 8);
+  const res = moveBlock(s, 2, 1); // 8192 next to 8192 → 16K
+  assertEqual([res.state.current, res.state.next], [4, 8]);
+  assertEqual(res.state.best, 16384);
+  assertEqual(res.state.status, STATUS.WON);
 });
 
 // ---------- win condition ----------

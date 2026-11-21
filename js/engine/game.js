@@ -96,6 +96,50 @@ export function dropBlock(state, col, rng = Math.random, cfg) {
 }
 
 /**
+ * MOVE PROCESS
+ * take the top block of `fromCol` → place it on top of `toCol` →
+ * merges/chains/gravity → win / game over check. Current/next not consumed.
+ */
+export function moveBlock(state, fromCol, toCol) {
+  const ended = ensurePlaying(state);
+  if (ended) return ended;
+  const valid = (c) => Number.isInteger(c) && c >= 0 && c < COLS;
+  if (!valid(fromCol) || !valid(toCol)) return fail('invalid-column');
+  if (fromCol === toCol) return fail('same-column');
+  const fromLanding = landingRow(state.grid, fromCol);
+  const fromRow = (fromLanding === -1 ? ROWS : fromLanding) - 1;
+  if (fromRow < 0) return fail('empty-column');
+  const toRow = landingRow(state.grid, toCol);
+  if (toRow === -1) return fail('column-full');
+
+  const grid = cloneGrid(state.grid);
+  const block = grid[fromCol][fromRow];
+  grid[fromCol][fromRow] = null;
+  grid[toCol][toRow] = block;
+  const steps = [
+    {
+      type: 'move',
+      block: { ...block },
+      from: { col: fromCol, row: fromRow },
+      to: { col: toCol, row: toRow },
+      grid: cloneGrid(grid),
+    },
+  ];
+  const res = resolveBoard(grid, { focus: new Map([[block.id, 2]]), nextId: state.nextId });
+  steps.push(...res.steps);
+
+  const status = evaluateStatus(res.grid);
+  return {
+    ok: true,
+    steps,
+    chains: res.chains,
+    gameOver: status === STATUS.OVER,
+    won: status === STATUS.WON,
+    state: { ...state, grid: res.grid, status, nextId: res.nextId, best: nextBest(state.best, res.steps) },
+  };
+}
+
+/**
  * BOMB PROCESS
  * validate target → remove block → gravity → merges/chains → game over check.
  * Current/next blocks are not consumed.

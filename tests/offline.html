@@ -15,16 +15,14 @@
       // (real time) while the worker installs, then use --dump-dom.
       const hold = new URLSearchParams(location.search).get('hold');
       if (hold) document.body.appendChild(Object.assign(new Image(), { src: hold }));
-      import { findLoopPoints } from '../js/ui/audio.js';
       const log = document.getElementById('log');
 
-      // Music must decode in this browser; report the trimmed loop points.
+      // Music must decode in this browser.
       let musicInfo = 'music: not checked';
       try {
         const data = await (await fetch('../audio/music.mp3')).arrayBuffer();
         const buf = await new OfflineAudioContext(2, 44100, 44100).decodeAudioData(data);
-        const lp = findLoopPoints(buf);
-        musicInfo = `music: decodes OK, ${buf.duration.toFixed(2)}s, ${buf.numberOfChannels}ch, loop ${lp.start.toFixed(3)}s → ${lp.end.toFixed(3)}s`;
+        musicInfo = `music: decodes OK, ${buf.duration.toFixed(2)}s, ${buf.numberOfChannels}ch`;
       } catch (e) {
         musicInfo = `music: DECODE FAILED ${e}`;
       }

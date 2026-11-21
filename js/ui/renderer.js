@@ -149,6 +149,34 @@ export class Renderer {
     if (animate) bump(el, 'pop');
   }
 
+  /**
+   * Move-mode highlights. move = null (off) or { from: null | col }.
+   * Picking phase: top block of every non-empty column is marked "movable".
+   * Target phase: the picked block lifts and valid destination lanes glow.
+   */
+  setMoveState(grid, move) {
+    for (const el of this.els.values()) el.classList.remove('movable', 'picked');
+    this.lanes.forEach((lane) => lane.classList.remove('target', 'source'));
+    if (!move) return;
+    const top = (c) => {
+      for (let r = grid[c].length - 1; r >= 0; r--) if (grid[c][r]) return grid[c][r];
+      return null;
+    };
+    if (move.from === null) {
+      for (let c = 0; c < grid.length; c++) {
+        const b = top(c);
+        if (b) this.els.get(b.id)?.classList.add('movable');
+      }
+      return;
+    }
+    const picked = top(move.from);
+    if (picked) this.els.get(picked.id)?.classList.add('picked');
+    this.lanes[move.from]?.classList.add('source');
+    this.lanes.forEach((lane, c) => {
+      if (c !== move.from && landingRow(grid, c) !== -1) lane.classList.add('target');
+    });
+  }
+
   setHoverLane(col) {
     this.lanes.forEach((lane, c) => lane.classList.toggle('hover', c === col));
   }
@@ -165,15 +193,17 @@ export class Renderer {
       if (isCancelled()) return;
       switch (step.type) {
         case 'drop':
-          await this.animDrop(step);
-          onEvent('drop', step);
+          await this.animDrop(step, () => onEvent('drop', step));
+          break;
+        case 'move':
+          await this.animMove(step, () => onEvent('land', step));
           break;
         case 'explode':
           onEvent('bomb', step);
           await this.animExplode(step);
           break;
         case 'gravity':
-          await this.animGravity(step);
+          await this.animGravity(step, () => onEvent('land', step));
           break;
         case 'merge':
           onEvent(step.chain > 1 ? 'chain' : 'merge', step);
@@ -185,7 +215,7 @@ export class Renderer {
     }
   }
 
-  async animDrop({ block, col, row }) {
+  async animDrop({ block, col, row }, onLand = () => {}) {
     const el = this.createEl(block);
     const start = this.pos(col, ROWS);
     el.style.transition = 'none';
@@ -194,21 +224,41 @@ export class Renderer {
     const dur = this.t(110 + 42 * (ROWS - row));
     this.place(el, col, row, `translate ${dur}ms ${FALL}`);
     await wait(dur);
+    onLand(); // collision
     bump(el, 'land');
     await wait(this.t(50));
   }
 
-  async animGravity({ moves }) {
+  /** Picked block flies from the top of one column to the top of another. */
+  async animMove({ block, to }, onLand = () => {}) {
+    const el = this.els.get(block.id);
+    if (!el) return;
+    el.classList.remove('picked');
+    el.style.zIndex = '4';
+    const dur = this.t(300);
+    this.place(el, to.col, to.row, `translate ${dur}ms cubic-bezier(.45,0,.35,1)`);
+    await wait(dur);
+    el.style.zIndex = '';
+    onLand();
+    bump(el, 'land');
+    await wait(this.t(60));
+  }
+
+  async animGravity({ moves }, onLand = () => {}) {
     let max = 0;
     const moved = [];
+    const landings = new Set();
     for (const m of moves) {
       const el = this.els.get(m.id);
       if (!el) continue;
       const dur = this.t(90 + 55 * (m.fromRow - m.toRow));
       max = Math.max(max, dur);
+      landings.add(dur);
       this.place(el, m.col, m.toRow, `translate ${dur}ms ${FALL}`);
       moved.push(el);
     }
+    // One collision sound per distinct landing moment.
+    for (const t of landings) setTimeout(onLand, t);
     await wait(max);
     moved.forEach((el) => bump(el, 'land'));
     await wait(this.t(70));

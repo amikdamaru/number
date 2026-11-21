@@ -37,9 +37,9 @@
           <span class="queue-label">BERIKUTNYA</span>
           <div class="tile preview-tile small empty" id="next-tile"></div>
         </div>
-        <div class="bomb-hint" aria-live="polite">
-          <strong>MODE BOM</strong>
-          <span>Ketuk balok yang ingin dihancurkan</span>
+        <div class="mode-hint" aria-live="polite">
+          <strong id="mode-hint-title">MODE BOM</strong>
+          <span id="mode-hint-text">Ketuk balok yang ingin dihancurkan</span>
         </div>
       </section>
 
@@ -71,18 +71,12 @@
           <span id="btn-bomb-label">BOM</span>
         </button>
 
-        <button type="button" class="ctrl-btn" id="btn-sound" aria-pressed="true" aria-label="Suara">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M4 9.5v5h3.5L12 18V6L7.5 9.5H4z" fill="currentColor" />
-            <path class="wave" d="M15.5 9.5a3.5 3.5 0 0 1 0 5" />
-            <path class="wave" d="M18 7a7 7 0 0 1 0 10" />
-            <path class="mute" d="M16 9.5l5 5M21 9.5l-5 5" />
-            <path class="note" d="M17 17.5V9.5l4-1v7" />
-            <circle class="note" cx="16" cy="17.5" r="1.6" fill="currentColor" />
-            <circle class="note" cx="20" cy="15.5" r="1.6" fill="currentColor" />
-            <path class="note-x" d="M15 8l7 11" />
+        <button type="button" class="ctrl-btn move-btn" id="btn-move" aria-pressed="false" aria-label="Pindahkan balok">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3v18M3 12h18" />
+            <path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3" />
           </svg>
-          <span id="btn-sound-label">SUARA ON</span>
+          <span id="btn-move-label">MOVE</span>
         </button>
       </nav>
     </div>

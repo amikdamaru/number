@@ -18,8 +18,7 @@
       // End-to-end checks: real DOM, real input events, real localStorage.
       // ?mode=shot&scene=… only renders a scene (for screenshots).
       import { serializeGame } from '../js/core/persistence.js';
-      import { GAME_KEY, SETTINGS_KEY } from '../js/core/storage.js';
-      import { findLoopPoints } from '../js/ui/audio.js';
+      import { GAME_KEY } from '../js/core/storage.js';
 
       const frame = document.getElementById('app');
       const log = document.getElementById('log');
@@ -40,9 +39,8 @@
         const full = grid.every((col) => col[6]);
         return { grid, current, next, status: full ? 'over' : 'playing', nextId: id, spawned: 30 };
       }
-      function seed(columns, current, next, sound = false) {
+      function seed(columns, current, next) {
         localStorage.setItem(GAME_KEY, JSON.stringify(serializeGame(makeState(columns, current, next))));
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify({ sound }));
       }
       async function load() {
         frame.src = '../index.html?t=' + Date.now();
@@ -102,6 +100,12 @@
           seed([[16384, 4096], [32768, 8192], [65536], [524288], [1048576]], 2, 4);
           await load();
           D().getElementById('win').hidden = true; // view the labels behind the dialog
+        } else if (scene === 'move') {
+          seed([[2, 8, 32], [4, 16], [64, 2], [128, 256, 4, 2], [512]], 8, 2);
+          await load();
+          D().getElementById('btn-move').click();
+          tapCell(1);
+          await sleep(300);
         } else if (scene === 'empty') {
           localStorage.clear();
           await load();
@@ -200,36 +204,52 @@
         await load();
         check('continue game restores the board after reopening', blocks().length === 1 && JSON.stringify(saved().grid) === before);
 
-        // --- sound button cycle (seeded: all off) ---
-        const audio = () => {
-          const s = JSON.parse(localStorage.getItem(SETTINGS_KEY));
-          return `${s.sound}/${s.music}/${D().getElementById('btn-sound-label').textContent}`;
-        };
-        check('sound starts as seeded (all off)', audio().endsWith('SUARA OFF'), audio());
-        D().getElementById('btn-sound').click();
-        check('tap 1 → all on', audio() === 'true/true/SUARA ON', audio());
-        D().getElementById('btn-sound').click();
-        check('tap 2 → music off', audio() === 'true/false/MUSIK OFF', audio());
-        D().getElementById('btn-sound').click();
-        check('tap 3 → all off', audio() === 'false/false/SUARA OFF', audio());
-        const musicRes = await fetch('../audio/music.mp3');
+        // --- controls: no sound button, NEW GAME / BOM / MOVE ---
+        const btns = [...D().querySelectorAll(".controls button")].map((b) => b.textContent.trim());
+        check("controls are NEW GAME, BOM, MOVE (no sound toggle)",
+          JSON.stringify(btns) === JSON.stringify(["NEW GAME", "BOM", "MOVE"]) && !D().getElementById("btn-sound"), JSON.stringify(btns));
+
+        // --- music file ---
+        const musicRes = await fetch("../audio/music.mp3");
         const musicData = musicRes.ok ? await musicRes.arrayBuffer() : new ArrayBuffer(0);
-        check('music file is served', musicData.byteLength > 1000000);
+        check("music file is served", musicData.byteLength > 1000000);
         try {
           const off = new OfflineAudioContext(2, 44100, 44100);
-          const buf = await Promise.race([off.decodeAudioData(musicData), sleep(4000).then(() => 'timeout')]);
-          if (buf === 'timeout') {
-            lines.push('SKIP  music decode (stalls under headless virtual time) – verify with tests/offline.html');
+          const buf = await Promise.race([off.decodeAudioData(musicData), sleep(4000).then(() => "timeout")]);
+          if (buf === "timeout") {
+            lines.push("SKIP  music decode (stalls under headless virtual time) – verify with tests/offline.html");
           } else {
-            const lp = findLoopPoints(buf);
-            lines.push(`INFO  music: ${buf.duration.toFixed(2)}s, loop ${lp.start.toFixed(3)}s → ${lp.end.toFixed(3)}s`);
-            check('music decodes and loop points are sane',
-              buf.duration > 5 && lp.start >= 0 && lp.start < 1 && lp.end > buf.duration - 1 && lp.end <= buf.duration);
+            check("music decodes", buf.duration > 5, String(buf.duration));
           }
         } catch (e) {
-          check('music decodes and loop points are sane', false, String(e));
+          check("music decodes", false, String(e));
         }
 
+        // --- move mode ---
+        seed([[2, 4], [], [16]], 2, 2);
+        await load();
+        const board2 = () => D().getElementById("board");
+        D().getElementById("btn-move").click();
+        check("move mode activates (button shows BATAL)", board2().classList.contains("move-mode") &&
+          D().getElementById("btn-move-label").textContent === "BATAL");
+        check("top block of every non-empty column is highlighted",
+          JSON.stringify([...D().querySelectorAll(".block.movable")].map((b) => b.textContent).sort()) === JSON.stringify(["16", "4"]));
+        tapCell(3);
+        await sleep(200);
+        check("tapping an empty column as source does nothing", !D().querySelector(".block.picked") && board2().classList.contains("move-mode"));
+        tapCell(0);
+        await sleep(200);
+        check("tapping column 1 picks its top block (4)", D().querySelector(".block.picked")?.textContent === "4");
+        check("valid destination columns are highlighted", D().querySelectorAll(".lane.target").length === 4);
+        tapCell(1);
+        await sleep(1500);
+        const mv = saved().grid.map((col) => col.filter(Boolean).map((x) => x[1]));
+        check("block moved to column 2", JSON.stringify(mv.slice(0, 3)) === "[[2],[4],[16]]", JSON.stringify(mv));
+        check("move mode ends after moving", !board2().classList.contains("move-mode") && !D().querySelector(".block.picked"));
+        check("DOM matches saved grid after move", blocks().length === 3);
+        D().getElementById("btn-move").click();
+        D().getElementById("btn-move").click();
+        check("tapping MOVE again cancels", !board2().classList.contains("move-mode"));
         // --- win ---
         seed([[8192], [], [2]], 8192, 2);
         await load();
@@ -237,6 +257,7 @@
         tapCell(1);
         await sleep(2500);
         check('win screen appears after 8192 + 8192', !D().getElementById('win').hidden);
+        check('music is stopped on the win screen', frame.contentWindow.numberMerge?.music.held === true);
         check('win title says "Kamu mencapai 16K!"', D().getElementById('win-title').textContent === 'Kamu mencapai 16K!',
           D().getElementById('win-title').textContent);
         check('merged block is labelled 16K', blocks().some((x) => x.textContent === '16K'));
@@ -246,6 +267,7 @@
         D().getElementById('win-new').click();
         await sleep(200);
         check('NEW GAME from win screen resets', blocks().length === 0 && D().getElementById('win').hidden);
+        check('music plays again after NEW GAME', frame.contentWindow.numberMerge?.music.held === false);
 
         // --- layout ---
         const app = D().querySelector('.app');

@@ -60,12 +60,3 @@ export function deserializeGame(data) {
     best: Math.max(isValidValue(data.best) ? data.best : 0, highestValue(compact)),
   };
 }
-
-export function sanitizeSettings(raw) {
-  const out = {};
-  if (raw && typeof raw === 'object') {
-    if (typeof raw.sound === 'boolean') out.sound = raw.sound;
-    if (typeof raw.music === 'boolean') out.music = raw.music;
-  }
-  return out;
-}

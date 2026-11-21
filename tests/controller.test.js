@@ -3,7 +3,7 @@ import { STATUS } from '../js/engine/config.js';
 import { createEmptyGrid, countBlocks } from '../js/engine/board.js';
 import { seededRng } from '../js/engine/generator.js';
 import { GameController } from '../js/core/controller.js';
-import { createStorage, createMemoryBackend, GAME_KEY, SETTINGS_KEY } from '../js/core/storage.js';
+import { createStorage, createMemoryBackend, GAME_KEY } from '../js/core/storage.js';
 import { serializeGame, deserializeGame } from '../js/core/persistence.js';
 
 function setup(seed = 1) {
@@ -117,24 +117,6 @@ test('game over state is restored as game over', () => {
   assertEqual(again.drop(0).reason, 'game-over');
 });
 
-test('24. sound button cycles all on → music off → all off → all on, and persists', () => {
-  const { backend, storage, ctl } = setup();
-  const pick = (s) => [s.sound, s.music];
-  assertEqual(pick(ctl.settings), [true, true]);
-  assertEqual(pick(ctl.cycleAudio()), [true, false]);
-  assertEqual(pick(JSON.parse(backend.getItem(SETTINGS_KEY))), [true, false]);
-  assertEqual(pick(new GameController({ storage }).settings), [true, false]);
-  assertEqual(pick(ctl.cycleAudio()), [false, false]);
-  assertEqual(pick(new GameController({ storage }).settings), [false, false]);
-  assertEqual(pick(ctl.cycleAudio()), [true, true]);
-});
-
-test('old settings without music field: sound off implies music off', () => {
-  const backend = createMemoryBackend({ [SETTINGS_KEY]: JSON.stringify({ sound: false }) });
-  const ctl = new GameController({ storage: createStorage(backend) });
-  assertEqual([ctl.settings.sound, ctl.settings.music], [false, false]);
-});
-
 test('won game: input locked, bomb unavailable, restored as won', () => {
   const { storage, ctl } = setup();
   seedBoard(ctl, [[8192]], 8192, 2);
@@ -197,5 +179,78 @@ test('storage failures never throw', () => {
   };
   const ctl = new GameController({ storage: createStorage(broken) });
   assert(ctl.drop(0).ok);
-  ctl.cycleAudio();
+});
+
+// ---------- move mode ----------
+
+test('move mode cannot start on an empty board or a finished game', () => {
+  const { ctl } = setup();
+  assertEqual(ctl.toggleMoveMode(), false);
+  seedBoard(ctl, [[2]]);
+  ctl.game.status = STATUS.OVER;
+  assertEqual(ctl.toggleMoveMode(), false);
+});
+
+test('move: pick source, tap target → top block moves, mode ends', () => {
+  const { ctl, backend } = setup();
+  seedBoard(ctl, [[2, 4], [], [16]]);
+  assertEqual(ctl.toggleMoveMode(), true);
+  assertEqual(ctl.moveFrom, null);
+  assertEqual(ctl.moveSelect(1).reason, 'empty-column', 'empty source refused');
+  assertEqual(ctl.moveSelect(0).action, 'picked');
+  assertEqual(ctl.moveFrom, 0);
+  const res = ctl.moveSelect(1);
+  assert(res.ok && res.action === 'moved');
+  assertEqual(ctl.game.grid.map((c) => c.filter(Boolean).map((b) => b.value)).slice(0, 3), [[2], [4], [16]]);
+  assertEqual(ctl.moveMode, false);
+  assertEqual(ctl.busy, true);
+  const saved = deserializeGame(JSON.parse(backend.getItem(GAME_KEY)));
+  assertEqual(saved.grid, ctl.game.grid, 'move is auto-saved');
+});
+
+test('move: tapping the source again un-picks; tapping move button cancels', () => {
+  const { ctl } = setup();
+  seedBoard(ctl, [[2, 4]]);
+  const before = JSON.stringify(ctl.game);
+  ctl.toggleMoveMode();
+  ctl.moveSelect(0);
+  assertEqual(ctl.moveSelect(0).action, 'unpicked');
+  assertEqual(ctl.moveFrom, null);
+  ctl.moveSelect(0);
+  assertEqual(ctl.toggleMoveMode(), false);
+  assertEqual(JSON.stringify(ctl.game), before, 'cancel has no consequences');
+});
+
+test('move: full destination keeps the block picked', () => {
+  const { ctl } = setup();
+  seedBoard(ctl, [[2], [4, 8, 16, 32, 64, 128, 256]]);
+  ctl.toggleMoveMode();
+  ctl.moveSelect(0);
+  assertEqual(ctl.moveSelect(1).reason, 'column-full');
+  assertEqual(ctl.moveFrom, 0);
+});
+
+test('move and bomb modes are exclusive; drop is blocked in move mode', () => {
+  const { ctl } = setup();
+  seedBoard(ctl, [[2, 4]]);
+  ctl.toggleBombMode();
+  ctl.toggleMoveMode();
+  assertEqual([ctl.bombMode, ctl.moveMode], [false, true]);
+  assertEqual(ctl.drop(3).reason, 'move-mode');
+  ctl.toggleBombMode();
+  assertEqual([ctl.bombMode, ctl.moveMode], [true, false]);
+});
+
+test('move can be used repeatedly and New Game clears move mode', () => {
+  const { ctl } = setup();
+  seedBoard(ctl, [[2, 4, 8]]);
+  for (let i = 1; i <= 3; i++) {
+    ctl.toggleMoveMode();
+    ctl.moveSelect(0);
+    assert(ctl.moveSelect(i).ok, `move #${i}`);
+    ctl.finishAnimation();
+  }
+  ctl.toggleMoveMode();
+  ctl.newGame();
+  assertEqual(ctl.moveMode, false);
 });

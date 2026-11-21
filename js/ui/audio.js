@@ -84,8 +84,15 @@ export class SoundFX {
           this.tone(720, 0.05, { type: 'triangle', gain: 0.22 });
           break;
         case 'drop':
-          this.tone(200, 0.1, { gain: 0.6, to: 90 });
+        case 'land': {
+          // Collision "thock": click transient + mid tone (audible on phone
+          // speakers) + a little low body. 'land' (gravity/move) is softer.
+          const g = name === 'land' ? 0.7 : 1;
+          this.noise(0.045, { gain: 0.6 * g, freq: 3200 });
+          this.tone(380, 0.09, { type: 'triangle', gain: 0.55 * g, to: 150 });
+          this.tone(120, 0.08, { gain: 0.35 * g, to: 70 });
           break;
+        }
         case 'error':
           this.tone(150, 0.1, { type: 'square', gain: 0.1, to: 110 });
           break;
@@ -127,16 +134,20 @@ export class SoundFX {
 }
 
 /**
- * Background music: decoded once into an AudioBuffer and looped by Web Audio,
- * which loops without the gap an <audio loop> element leaves. Shares the
- * AudioContext of SoundFX. Kept quieter than the sound effects.
+ * Background music: decoded once into an AudioBuffer and looped by Web Audio.
+ * The whole file is looped as-is, including its natural silence at the start
+ * and end, so there is a short pause between repeats. Shares the AudioContext
+ * of SoundFX and is kept quieter than the sound effects.
+ *
+ * hold(true) stops the music (e.g. on the win screen); hold(false) restarts it
+ * from the beginning.
  */
 export class MusicPlayer {
   constructor(fx, url, { volume = 0.1 } = {}) {
     this.fx = fx;
     this.url = url;
     this.volume = volume;
-    this.enabled = false;
+    this.held = false;
     this.buffer = null;
     this.loading = null;
     this.source = null;
@@ -144,15 +155,15 @@ export class MusicPlayer {
     this.starting = false;
   }
 
-  setEnabled(on) {
-    this.enabled = Boolean(on);
-    if (this.enabled) this.start();
-    else this.stop();
-  }
-
   /** Call from a user gesture: browsers block audio until the first tap. */
   unlock() {
-    if (this.enabled) this.start();
+    if (!this.held) this.start();
+  }
+
+  hold(on) {
+    this.held = Boolean(on);
+    if (this.held) this.stop();
+    else this.start();
   }
 
   load(ctx) {
@@ -164,11 +175,7 @@ export class MusicPlayer {
           return res.arrayBuffer();
         })
         .then((data) => new Promise((resolve, reject) => ctx.decodeAudioData(data, resolve, reject)))
-        .then((buf) => {
-          this.buffer = buf;
-          this.loopPoints = findLoopPoints(buf);
-          return buf;
-        })
+        .then((buf) => (this.buffer = buf))
         .catch((err) => {
           this.loading = null;
           throw err;
@@ -184,23 +191,20 @@ export class MusicPlayer {
     this.starting = true;
     try {
       const buf = await this.load(ctx);
-      if (!this.enabled || this.source) return;
+      if (this.held || this.source) return;
       const gain = ctx.createGain();
       gain.gain.setValueAtTime(0.0001, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(this.volume, ctx.currentTime + 1.5);
       gain.connect(ctx.destination);
       const src = ctx.createBufferSource();
       src.buffer = buf;
-      src.loop = true;
-      const { start, end } = this.loopPoints || { start: 0, end: buf.duration };
-      src.loopStart = start;
-      src.loopEnd = end;
+      src.loop = true; // whole buffer, silence included
       src.connect(gain);
-      src.start(0, start);
+      src.start();
       this.source = src;
       this.gain = gain;
     } catch (err) {
-      console.warn('Music unavailable', err);
+      console.warn("Music unavailable", err);
     } finally {
       this.starting = false;
     }
@@ -227,21 +231,4 @@ export class MusicPlayer {
       }
     }
   }
-}
-
-/**
- * MP3 files carry encoder padding (near-silence) at both ends, which makes a
- * looped track stutter. Returns loop points (seconds) that skip that silence.
- */
-export function findLoopPoints(buf, threshold = 0.002) {
-  const data = buf.getChannelData(0);
-  const ch2 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : data;
-  const loud = (i) => Math.abs(data[i]) > threshold || Math.abs(ch2[i]) > threshold;
-  let a = 0;
-  while (a < data.length && !loud(a)) a++;
-  let b = data.length - 1;
-  while (b > a && !loud(b)) b--;
-  // Fall back to the whole buffer if trimming would leave almost nothing.
-  if (b - a < buf.sampleRate) return { start: 0, end: buf.duration };
-  return { start: a / buf.sampleRate, end: (b + 1) / buf.sampleRate };
 }
