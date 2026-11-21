@@ -22,10 +22,11 @@ export function tileStyle(value) {
   return { bg: `hsl(${(exp * 53) % 360} 80% 58%)`, fg: '#ffffff' };
 }
 
+/** Up to 8192 the full number is shown; above that 16K, 32K … 512K, 1M, 2M … 1G … */
 export function formatValue(value) {
-  if (value < 100000) return String(value);
-  if (value < 100 * 1048576) return `${Math.round(value / 1024)}K`;
-  if (value < 100 * 1073741824) return `${Math.round(value / 1048576)}M`;
+  if (value <= 8192) return String(value);
+  if (value < 1048576) return `${Math.round(value / 1024)}K`;
+  if (value < 1073741824) return `${Math.round(value / 1048576)}M`;
   return `${Math.round(value / 1073741824)}G`;
 }
 

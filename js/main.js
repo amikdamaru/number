@@ -1,11 +1,12 @@
 // App entry: wires the controller (state), renderer (DOM), input and sound.
 
 import { COLS } from './engine/config.js';
-import { isBoardEmpty } from './engine/board.js';
+import { isBoardEmpty, highestValue } from './engine/board.js';
 import { GameController } from './core/controller.js';
 import { createStorage, getLocalStorage } from './core/storage.js';
 import { Renderer } from './ui/renderer.js';
-import { SoundFX } from './ui/audio.js';
+import { SoundFX, MusicPlayer } from './ui/audio.js';
+import { formatValue, paintTile } from './ui/tiles.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -25,10 +26,16 @@ const ui = {
   confirmCancel: $('confirm-cancel'),
   gameover: $('gameover'),
   gameoverNew: $('gameover-new'),
+  win: $('win'),
+  winTitle: $('win-title'),
+  winTile: $('win-tile'),
+  winNew: $('win-new'),
 };
 
 const controller = new GameController({ storage: createStorage(getLocalStorage()) });
 const sound = new SoundFX(controller.settings.sound);
+const music = new MusicPlayer(sound, 'audio/music.ogg');
+music.enabled = controller.settings.music; // starts on the first tap
 const renderer = new Renderer({
   area: ui.area,
   board: ui.board,
@@ -42,7 +49,7 @@ const renderer = new Renderer({
 function refreshControls() {
   const { bombMode, busy } = controller;
   const empty = isBoardEmpty(controller.game.grid);
-  ui.btnBomb.disabled = controller.isOver || (empty && !bombMode);
+  ui.btnBomb.disabled = controller.isEnded || (empty && !bombMode);
   ui.btnBomb.classList.toggle('active', bombMode);
   ui.btnBomb.setAttribute('aria-pressed', String(bombMode));
   ui.btnBombLabel.textContent = bombMode ? 'BATAL' : 'BOM';
@@ -50,10 +57,21 @@ function refreshControls() {
   ui.board.classList.toggle('busy', busy);
   ui.queue.classList.toggle('bomb-mode', bombMode);
 
-  const on = controller.settings.sound;
-  ui.btnSound.classList.toggle('off', !on);
-  ui.btnSound.setAttribute('aria-pressed', String(on));
-  ui.btnSoundLabel.textContent = on ? 'SUARA ON' : 'SUARA OFF';
+  const { sound: sfxOn, music: musicOn } = controller.settings;
+  ui.btnSound.classList.toggle('off', !sfxOn);
+  ui.btnSound.classList.toggle('no-music', sfxOn && !musicOn);
+  ui.btnSound.setAttribute('aria-pressed', String(sfxOn));
+  ui.btnSoundLabel.textContent = !sfxOn ? 'SUARA OFF' : musicOn ? 'SUARA ON' : 'MUSIK OFF';
+}
+
+function showEndScreen() {
+  ui.gameover.hidden = !controller.isOver;
+  ui.win.hidden = !controller.isWon;
+  if (controller.isWon) {
+    const best = highestValue(controller.game.grid);
+    ui.winTitle.textContent = `Kamu mencapai ${formatValue(best)}!`;
+    paintTile(ui.winTile, best);
+  }
 }
 
 function refreshPreview(animate) {
@@ -65,7 +83,7 @@ function renderAll() {
   renderer.sync(controller.game.grid);
   refreshPreview(false);
   refreshControls();
-  ui.gameover.hidden = !controller.isOver;
+  showEndScreen();
 }
 
 // ---------- action playback ----------
@@ -90,15 +108,19 @@ async function playSteps(steps) {
   renderer.sync(controller.game.grid);
   refreshPreview(true);
   refreshControls();
-  if (controller.isOver) {
+  if (controller.isWon) {
+    sound.play('win');
+    showEndScreen();
+    ui.winNew.focus({ preventScroll: true });
+  } else if (controller.isOver) {
     sound.play('gameover');
-    ui.gameover.hidden = false;
+    showEndScreen();
     ui.gameoverNew.focus({ preventScroll: true });
   }
 }
 
 function tryDrop(col) {
-  if (controller.busy || controller.isOver || controller.bombMode) return;
+  if (controller.busy || controller.isEnded || controller.bombMode) return;
   const res = controller.drop(col);
   if (!res.ok) {
     if (res.reason === 'column-full') {
@@ -127,7 +149,7 @@ function tryBomb(col, row) {
 }
 
 function toggleBomb() {
-  if (controller.busy || controller.isOver) return;
+  if (controller.busy || controller.isEnded) return;
   controller.toggleBombMode();
   sound.play('click');
   refreshControls();
@@ -139,6 +161,7 @@ function startNewGame() {
   renderer.sync(controller.game.grid);
   ui.confirm.hidden = true;
   ui.gameover.hidden = true;
+  ui.win.hidden = true;
   refreshPreview(true);
   refreshControls();
 }
@@ -146,7 +169,7 @@ function startNewGame() {
 function requestNewGame() {
   sound.play('click');
   const nothingToLose = isBoardEmpty(controller.game.grid) && !controller.busy;
-  if (controller.isOver || nothingToLose) {
+  if (controller.isEnded || nothingToLose) {
     startNewGame();
     return;
   }
@@ -163,7 +186,7 @@ ui.board.addEventListener('pointerdown', (e) => {
   if (!e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0)) return;
   e.preventDefault();
   sound.unlock();
-  if (controller.busy || controller.isOver) return;
+  if (controller.busy || controller.isEnded) return;
   const cell = renderer.cellFromPoint(e.clientX, e.clientY);
   if (!cell) return;
   if (controller.bombMode) tryBomb(cell.col, cell.row);
@@ -181,8 +204,9 @@ ui.board.addEventListener('contextmenu', (e) => e.preventDefault());
 ui.btnBomb.addEventListener('click', toggleBomb);
 ui.btnNew.addEventListener('click', requestNewGame);
 ui.btnSound.addEventListener('click', () => {
-  controller.setSound(!controller.settings.sound);
-  sound.setEnabled(controller.settings.sound);
+  const s = controller.cycleAudio();
+  sound.setEnabled(s.sound);
+  music.setEnabled(s.music);
   sound.play('click');
   refreshControls();
 });
@@ -202,8 +226,27 @@ ui.gameoverNew.addEventListener('click', () => {
   sound.play('click');
   startNewGame();
 });
+ui.winNew.addEventListener('click', () => {
+  sound.play('click');
+  startNewGame();
+});
 
-document.addEventListener('pointerdown', () => sound.unlock(), { passive: true });
+document.addEventListener(
+  'pointerdown',
+  () => {
+    sound.unlock();
+    music.unlock();
+  },
+  { passive: true },
+);
+
+// Pause all audio while the app is in the background (saves battery).
+document.addEventListener('visibilitychange', () => {
+  const ctx = sound.ctx;
+  if (!ctx) return;
+  if (document.hidden) ctx.suspend().catch(() => {});
+  else if (controller.settings.sound || controller.settings.music) ctx.resume().catch(() => {});
+});
 
 // Desktop shortcuts: 1-5 drop, B toggles bomb, Esc cancels bomb / dialog.
 document.addEventListener('keydown', (e) => {
@@ -215,6 +258,7 @@ document.addEventListener('keydown', (e) => {
   const n = Number(e.key);
   if (Number.isInteger(n) && n >= 1 && n <= COLS) {
     sound.unlock();
+    music.unlock();
     tryDrop(n - 1);
   } else if (e.key === 'b' || e.key === 'B') {
     toggleBomb();

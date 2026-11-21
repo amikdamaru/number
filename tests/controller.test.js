@@ -117,12 +117,38 @@ test('game over state is restored as game over', () => {
   assertEqual(again.drop(0).reason, 'game-over');
 });
 
-test('24. sound preference persists', () => {
+test('24. sound button cycles all on → music off → all off → all on, and persists', () => {
   const { backend, storage, ctl } = setup();
-  assertEqual(ctl.settings.sound, true);
-  ctl.setSound(false);
-  assertEqual(JSON.parse(backend.getItem(SETTINGS_KEY)).sound, false);
-  assertEqual(new GameController({ storage }).settings.sound, false);
+  const pick = (s) => [s.sound, s.music];
+  assertEqual(pick(ctl.settings), [true, true]);
+  assertEqual(pick(ctl.cycleAudio()), [true, false]);
+  assertEqual(pick(JSON.parse(backend.getItem(SETTINGS_KEY))), [true, false]);
+  assertEqual(pick(new GameController({ storage }).settings), [true, false]);
+  assertEqual(pick(ctl.cycleAudio()), [false, false]);
+  assertEqual(pick(new GameController({ storage }).settings), [false, false]);
+  assertEqual(pick(ctl.cycleAudio()), [true, true]);
+});
+
+test('old settings without music field: sound off implies music off', () => {
+  const backend = createMemoryBackend({ [SETTINGS_KEY]: JSON.stringify({ sound: false }) });
+  const ctl = new GameController({ storage: createStorage(backend) });
+  assertEqual([ctl.settings.sound, ctl.settings.music], [false, false]);
+});
+
+test('won game: input locked, bomb unavailable, restored as won', () => {
+  const { storage, ctl } = setup();
+  seedBoard(ctl, [[8192]], 8192, 2);
+  const res = ctl.drop(1); // 8192 + 8192 → 16K
+  assert(res.ok && res.won);
+  assertEqual(ctl.game.status, STATUS.WON);
+  assertEqual(ctl.isEnded, true);
+  ctl.finishAnimation();
+  assertEqual(ctl.drop(2).reason, 'game-won');
+  assertEqual(ctl.toggleBombMode(), false);
+  const again = new GameController({ storage });
+  assertEqual(again.isWon, true);
+  ctl.newGame();
+  assertEqual(ctl.game.status, STATUS.PLAYING);
 });
 
 test('corrupted save falls back to a fresh game', () => {
@@ -159,5 +185,5 @@ test('storage failures never throw', () => {
   };
   const ctl = new GameController({ storage: createStorage(broken) });
   assert(ctl.drop(0).ok);
-  ctl.setSound(false);
+  ctl.cycleAudio();
 });

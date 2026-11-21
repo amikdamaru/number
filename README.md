@@ -3,7 +3,10 @@
 Game puzzle angka **Drop & Merge** untuk penggunaan pribadi. Berbentuk Progressive Web App (PWA): bisa di-install dari Chrome Android dan dimainkan offline.
 
 - 5 kolom × 7 baris, multi-block merge (`N` balok bernilai `V` → `V × 2^(N-1)`), chain merge otomatis
-- Bom tanpa batas, auto save, continue game, sound on/off
+- **Menang** saat berhasil membuat balok **16K (16384) atau lebih**. Setelah itu permainan selesai.
+- Angka sampai 8192 ditulis lengkap. Di atasnya pakai singkatan: 16K, 32K, … 512K, 1M, …
+- Bom tanpa batas, auto save, continue game
+- Musik latar + efek suara. Tombol SUARA berputar: Semua ON → Musik OFF → Semua OFF
 - Tanpa skor, tanpa login, tanpa backend, tanpa dependency, dan **tanpa proses build**
 
 ## Menjalankan secara lokal
@@ -24,15 +27,15 @@ Project ini berupa file statis biasa (HTML + CSS + JavaScript ES modules), jadi 
 - **Ketuk kolom**: jatuhkan balok "Sekarang"
 - **BOM**: masuk mode bom, lalu ketuk satu balok untuk menghancurkannya. Ketuk BOM lagi (BATAL) untuk membatalkan.
 - **NEW GAME**: mulai ulang (dengan konfirmasi)
-- **SUARA**: nyalakan/matikan efek suara
+- **SUARA**: ketuk untuk berganti mode: Semua ON → Musik OFF → Semua OFF
 - Keyboard (desktop): `1`–`5` drop, `B` bom, `Esc` batal
 
 ## Testing
 
 Jalankan server lokal, lalu buka di browser:
 
-- `tests/index.html`: 44 unit test (engine, connected components, gravitasi, rumus merge, chain, bom, game over, generator, save/load, fuzz 3000 langkah acak)
-- `tests/ui.html`: 34 test end-to-end di aplikasi asli (input sentuh, double tap, bom, game over, new game, auto save, continue, suara, layout, cache offline)
+- `tests/index.html`: 52 unit test (engine, connected components, gravitasi, rumus merge, chain, bom, game over, menang 16K, label angka, generator, save/load, siklus suara/musik, fuzz 3000 langkah acak)
+- `tests/ui.html`: 44 test end-to-end di aplikasi asli (input sentuh, double tap, bom, game over, layar menang, new game, auto save, continue, siklus tombol suara, file musik, layout, cache offline)
 
 Judul tab menampilkan `PASS x/y` atau `FAIL x/y`.
 
@@ -85,15 +88,26 @@ js/core/                State & penyimpanan
 js/ui/                  Tampilan
   renderer.js           Render balok & animasi (drop, merge, chain, gravitasi, ledakan)
   tiles.js              Warna & label per angka
-  audio.js              Efek suara sintetis (Web Audio, tanpa file audio)
+  audio.js              Efek suara sintetis + pemutar musik loop (Web Audio)
+audio/music.ogg         Musik latar (CC BY 4.0, lihat Kredit musik)
 icons/                  Ikon aplikasi (SVG + PNG 192/512/maskable)
 tools/generate-icons.ps1  Generator ikon PNG
 tests/                  Unit test & UI test
 ```
 
+## Kredit musik
+
+**“Winter Village [Loop]”** oleh **Visager**, dari album *Songs From An Unmade World 2*.
+Lisensi: [Creative Commons Attribution 4.0 (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/).
+Sumber: [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Visager_-_25_-_Winter_Village_Loop.ogg) / [Free Music Archive](https://freemusicarchive.org/music/Visager/).
+File disimpan sebagai `audio/music.ogg` tanpa diubah. Kredit juga ditampilkan di dialog New Game, Game Over, dan Menang.
+
 ## Menyesuaikan
+
+- **Nilai kemenangan**: `WIN_VALUE` di `js/engine/config.js` (default 16384)
+- **Musik**: ganti `audio/music.ogg` (format OGG/MP3; jika nama file berubah, ubah juga di `js/main.js` dan `sw.js`). Volume diatur lewat `volume` di `MusicPlayer` (`js/ui/audio.js`).
 
 - **Probabilitas angka**: `SPAWN_CONFIG` di `js/engine/generator.js` (bobot pembuka, bobot normal, batas angka maksimum yang muncul relatif terhadap balok tertinggi)
 - **Ukuran papan**: `COLS` / `ROWS` di `js/engine/config.js` (save lama otomatis diabaikan bila ukurannya berbeda)
 - **Warna balok**: `PALETTE` di `js/ui/tiles.js`
-- **Suara default**: `DEFAULT_SETTINGS` di `js/core/controller.js`
+- **Suara/musik default**: `DEFAULT_SETTINGS` di `js/core/controller.js`

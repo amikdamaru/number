@@ -1,7 +1,7 @@
 // Service worker: precaches the whole app so it runs fully offline.
 // Bump CACHE_VERSION whenever you deploy changed files.
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_NAME = `number-merge-${CACHE_VERSION}`;
 
 const ASSETS = [
@@ -25,6 +25,7 @@ const ASSETS = [
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',
   './icons/apple-touch-icon.png',
+  './audio/music.ogg',
 ];
 
 self.addEventListener('install', (event) => {

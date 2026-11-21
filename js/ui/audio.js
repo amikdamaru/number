@@ -28,7 +28,7 @@ export class SoundFX {
         return null;
       }
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.16;
+      this.master.gain.value = 0.2;
       this.master.connect(this.ctx.destination);
     }
     if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
@@ -106,6 +106,12 @@ export class SoundFX {
           this.noise(0.4, { gain: 0.9, freq: 1800 });
           this.tone(130, 0.35, { gain: 0.7, to: 38 });
           break;
+        case 'win':
+          [523, 659, 784, 1047].forEach((f, i) =>
+            this.tone(f, 0.28, { type: 'triangle', gain: 0.35, delay: i * 0.12 }),
+          );
+          this.tone(1568, 0.6, { type: 'sine', gain: 0.22, delay: 0.5 });
+          break;
         case 'gameover':
           [440, 349, 262, 196].forEach((f, i) =>
             this.tone(f, 0.22, { type: 'triangle', gain: 0.32, delay: i * 0.16 }),
@@ -116,6 +122,102 @@ export class SoundFX {
       }
     } catch {
       /* audio is best effort */
+    }
+  }
+}
+
+/**
+ * Background music: decoded once into an AudioBuffer and looped by Web Audio,
+ * which loops without the gap an <audio loop> element leaves. Shares the
+ * AudioContext of SoundFX. Kept quieter than the sound effects.
+ */
+export class MusicPlayer {
+  constructor(fx, url, { volume = 0.1 } = {}) {
+    this.fx = fx;
+    this.url = url;
+    this.volume = volume;
+    this.enabled = false;
+    this.buffer = null;
+    this.loading = null;
+    this.source = null;
+    this.gain = null;
+    this.starting = false;
+  }
+
+  setEnabled(on) {
+    this.enabled = Boolean(on);
+    if (this.enabled) this.start();
+    else this.stop();
+  }
+
+  /** Call from a user gesture: browsers block audio until the first tap. */
+  unlock() {
+    if (this.enabled) this.start();
+  }
+
+  load(ctx) {
+    if (this.buffer) return Promise.resolve(this.buffer);
+    if (!this.loading) {
+      this.loading = fetch(this.url)
+        .then((res) => {
+          if (!res.ok) throw new Error(`music HTTP ${res.status}`);
+          return res.arrayBuffer();
+        })
+        .then((data) => new Promise((resolve, reject) => ctx.decodeAudioData(data, resolve, reject)))
+        .then((buf) => (this.buffer = buf))
+        .catch((err) => {
+          this.loading = null;
+          throw err;
+        });
+    }
+    return this.loading;
+  }
+
+  async start() {
+    if (this.source || this.starting) return;
+    const ctx = this.fx.ensure();
+    if (!ctx) return;
+    this.starting = true;
+    try {
+      const buf = await this.load(ctx);
+      if (!this.enabled || this.source) return;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(this.volume, ctx.currentTime + 1.5);
+      gain.connect(ctx.destination);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      src.connect(gain);
+      src.start();
+      this.source = src;
+      this.gain = gain;
+    } catch (err) {
+      console.warn('Music unavailable', err);
+    } finally {
+      this.starting = false;
+    }
+  }
+
+  stop() {
+    const src = this.source;
+    const gain = this.gain;
+    this.source = null;
+    this.gain = null;
+    if (!src) return;
+    const ctx = this.fx.ctx;
+    try {
+      const t = ctx.currentTime;
+      gain.gain.cancelScheduledValues(t);
+      gain.gain.setValueAtTime(Math.max(gain.gain.value, 0.0001), t);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+      src.stop(t + 0.45);
+    } catch {
+      try {
+        src.stop();
+      } catch {
+        /* already stopped */
+      }
     }
   }
 }

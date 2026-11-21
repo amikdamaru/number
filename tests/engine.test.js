@@ -11,6 +11,7 @@ import {
 } from '../js/engine/board.js';
 import { createGame, dropBlock, bombBlock } from '../js/engine/game.js';
 import { generateValue, spawnTable, seededRng, SPAWN_CONFIG } from '../js/engine/generator.js';
+import { formatValue } from '../js/ui/tiles.js';
 
 // ---------- helpers ----------
 
@@ -280,6 +281,61 @@ test('no false game over when the last cell merges away', () => {
   const res = dropBlock(stateFrom(nearlyFull(), 8), 4, rng);
   assertEqual(res.state.status, STATUS.PLAYING);
   checkInvariants(res.state.grid);
+});
+
+// ---------- win condition ----------
+
+test('win: merging two 8192 into 16K ends the game as won', () => {
+  const res = dropBlock(stateFrom([[8192], [], [2]], 8192), 1, rng);
+  assertEqual(values(res.state.grid), [[], [16384], [2], [], []]);
+  assertEqual(res.state.status, STATUS.WON);
+  assertEqual(res.won, true);
+  assertEqual(dropBlock(res.state, 4, rng).reason, 'game-won');
+  assertEqual(bombBlock(res.state, 2, 0).reason, 'game-won');
+});
+
+test('win: a chain that overshoots (32K) also wins', () => {
+  // three 8192 → 8192 × 4 = 32768
+  const res = dropBlock(stateFrom([[8192], [], [8192]], 8192), 1, rng);
+  assertEqual(values(res.state.grid)[1], [32768]);
+  assertEqual(res.state.status, STATUS.WON);
+});
+
+test('win: a merge triggered by a bomb can win', () => {
+  // bombing the 2 drops 8192 next to the other 8192
+  const res = bombBlock(stateFrom([[4, 2, 8192], [16, 8192]]), 0, 1);
+  assertEqual(res.state.status, STATUS.WON);
+});
+
+test('win on the last free cell (board nearly full) is a win, not game over', () => {
+  const cols = nearlyFull();
+  cols[3][6] = 8192; // neighbour of the last free cell (4,6)
+  const res = dropBlock(stateFrom(cols, 8192), 4, rng);
+  assertEqual(res.state.status, STATUS.WON);
+});
+
+test('8192 does not win yet', () => {
+  const res = dropBlock(stateFrom([[4096]], 4096), 1, rng);
+  assertEqual(values(res.state.grid)[1], [8192]);
+  assertEqual(res.state.status, STATUS.PLAYING);
+});
+
+// ---------- labels ----------
+
+test('labels: full number up to 8192, then 16K 32K … 512K, 1M …', () => {
+  const cases = [
+    [2, '2'],
+    [1024, '1024'],
+    [8192, '8192'],
+    [16384, '16K'],
+    [32768, '32K'],
+    [65536, '64K'],
+    [524288, '512K'],
+    [1048576, '1M'],
+    [2097152, '2M'],
+    [1073741824, '1G'],
+  ];
+  for (const [v, label] of cases) assertEqual(formatValue(v), label, String(v));
 });
 
 // ---------- generator ----------

@@ -92,6 +92,15 @@
           for (let c = 0; c < 5; c++) { const col = []; for (let r = 0; r < 7; r++) col.push((c + r) % 2 ? 8 : 4); cols.push(col); }
           seed(cols, 2, 2);
           await load();
+        } else if (scene === 'win') {
+          seed([[8192], [], [2]], 8192, 2);
+          await load();
+          tapCell(1);
+          await sleep(3000);
+        } else if (scene === 'big') {
+          seed([[16384, 4096], [32768, 8192], [65536], [524288], [1048576]], 2, 4);
+          await load();
+          D().getElementById('win').hidden = true; // view the labels behind the dialog
         } else if (scene === 'empty') {
           localStorage.clear();
           await load();
@@ -190,12 +199,37 @@
         await load();
         check('continue game restores the board after reopening', blocks().length === 1 && JSON.stringify(saved().grid) === before);
 
-        // --- sound toggle ---
+        // --- sound button cycle (seeded: all off) ---
+        const audio = () => {
+          const s = JSON.parse(localStorage.getItem(SETTINGS_KEY));
+          return `${s.sound}/${s.music}/${D().getElementById('btn-sound-label').textContent}`;
+        };
+        check('sound starts as seeded (all off)', audio().endsWith('SUARA OFF'), audio());
         D().getElementById('btn-sound').click();
-        check('sound toggle saves preference', JSON.parse(localStorage.getItem(SETTINGS_KEY)).sound === true &&
-          D().getElementById('btn-sound-label').textContent === 'SUARA ON');
+        check('tap 1 → all on', audio() === 'true/true/SUARA ON', audio());
         D().getElementById('btn-sound').click();
-        check('sound toggle off', JSON.parse(localStorage.getItem(SETTINGS_KEY)).sound === false);
+        check('tap 2 → music off', audio() === 'true/false/MUSIK OFF', audio());
+        D().getElementById('btn-sound').click();
+        check('tap 3 → all off', audio() === 'false/false/SUARA OFF', audio());
+        const musicRes = await fetch('../audio/music.ogg');
+        check('music file is served', musicRes.ok && (await musicRes.arrayBuffer()).byteLength > 1000000);
+
+        // --- win ---
+        seed([[8192], [], [2]], 8192, 2);
+        await load();
+        check('no win screen before 16K', D().getElementById('win').hidden);
+        tapCell(1);
+        await sleep(2500);
+        check('win screen appears after 8192 + 8192', !D().getElementById('win').hidden);
+        check('win title says "Kamu mencapai 16K!"', D().getElementById('win-title').textContent === 'Kamu mencapai 16K!',
+          D().getElementById('win-title').textContent);
+        check('merged block is labelled 16K', blocks().some((x) => x.textContent === '16K'));
+        check('game ends on win (saved as won, bomb disabled)', saved().status === 'won' && D().getElementById('btn-bomb').disabled);
+        await load();
+        check('win screen persists after reopen', !D().getElementById('win').hidden);
+        D().getElementById('win-new').click();
+        await sleep(200);
+        check('NEW GAME from win screen resets', blocks().length === 0 && D().getElementById('win').hidden);
 
         // --- layout ---
         const app = D().querySelector('.app');
@@ -208,12 +242,13 @@
         const reg = await frame.contentWindow.navigator.serviceWorker.getRegistration('./');
         check('service worker registered', Boolean(reg));
         let cached = [];
-        for (let i = 0; i < 60 && cached.length < 20; i++) {
+        const hasMusic = () => cached.some((r) => r.url.endsWith('/audio/music.ogg'));
+        for (let i = 0; i < 60 && !(cached.length >= 21 && hasMusic()); i++) {
           const names = (await caches.keys()).filter((k) => k.startsWith('number-merge-'));
           cached = names.length ? await (await caches.open(names[0])).keys() : [];
-          if (cached.length < 20) await sleep(200);
+          if (cached.length < 21) await sleep(200);
         }
-        check('offline cache holds all app assets', cached.length >= 20, `cached ${cached.length}`);
+        check('offline cache holds all app assets incl. music', cached.length >= 21 && hasMusic(), `cached ${cached.length}`);
 
         lines.push('', `${pass} passed, ${fail} failed, ${pass + fail} total`);
         log.textContent = lines.join('\n');

@@ -1,8 +1,9 @@
 // (De)serialization of game state with strict validation, so a corrupted
 // save can never put an invalid board on screen.
 
-import { COLS, ROWS, STATE_VERSION, STATUS } from '../engine/config.js';
-import { applyGravity, isBoardFull } from '../engine/board.js';
+import { COLS, ROWS, STATE_VERSION } from '../engine/config.js';
+import { applyGravity } from '../engine/board.js';
+import { evaluateStatus } from '../engine/game.js';
 
 export function isValidValue(v) {
   return Number.isSafeInteger(v) && v >= 2 && Number.isInteger(Math.log2(v));
@@ -51,7 +52,7 @@ export function deserializeGame(data) {
     grid: compact,
     current: data.current,
     next: data.next,
-    status: isBoardFull(compact) ? STATUS.OVER : STATUS.PLAYING,
+    status: evaluateStatus(compact),
     nextId: Number.isSafeInteger(data.nextId) && data.nextId > maxId ? data.nextId : maxId + 1,
     spawned: Number.isSafeInteger(data.spawned) && data.spawned >= 0 ? data.spawned : 2,
   };
@@ -59,6 +60,9 @@ export function deserializeGame(data) {
 
 export function sanitizeSettings(raw) {
   const out = {};
-  if (raw && typeof raw === 'object' && typeof raw.sound === 'boolean') out.sound = raw.sound;
+  if (raw && typeof raw === 'object') {
+    if (typeof raw.sound === 'boolean') out.sound = raw.sound;
+    if (typeof raw.music === 'boolean') out.music = raw.music;
+  }
   return out;
 }

@@ -3,7 +3,7 @@
 // State shape:
 //   { grid, current, next, status, nextId, spawned }
 
-import { COLS, ROWS, STATUS } from './config.js';
+import { COLS, ROWS, STATUS, WIN_VALUE } from './config.js';
 import {
   createEmptyGrid,
   cloneGrid,
@@ -15,6 +15,19 @@ import {
 import { generateValue } from './generator.js';
 
 const fail = (reason) => ({ ok: false, reason });
+
+/** Win (a block ≥ WIN_VALUE exists) beats game over (board full). */
+export function evaluateStatus(grid) {
+  if (highestValue(grid) >= WIN_VALUE) return STATUS.WON;
+  if (isBoardFull(grid)) return STATUS.OVER;
+  return STATUS.PLAYING;
+}
+
+function ensurePlaying(state) {
+  if (state.status === STATUS.OVER) return fail('game-over');
+  if (state.status === STATUS.WON) return fail('game-won');
+  return null;
+}
 
 export function createGame(rng = Math.random, cfg) {
   return {
@@ -33,7 +46,8 @@ export function createGame(rng = Math.random, cfg) {
  * check game over → advance current/next.
  */
 export function dropBlock(state, col, rng = Math.random, cfg) {
-  if (state.status !== STATUS.PLAYING) return fail('game-over');
+  const ended = ensurePlaying(state);
+  if (ended) return ended;
   if (!Number.isInteger(col) || col < 0 || col >= COLS) return fail('invalid-column');
   const row = landingRow(state.grid, col);
   if (row === -1) return fail('column-full');
@@ -46,7 +60,7 @@ export function dropBlock(state, col, rng = Math.random, cfg) {
   const res = resolveBoard(grid, { focus: new Map([[block.id, 2]]), nextId: state.nextId + 1 });
   steps.push(...res.steps);
 
-  const status = isBoardFull(res.grid) ? STATUS.OVER : STATUS.PLAYING;
+  const status = evaluateStatus(res.grid);
   const next = generateValue(rng, { spawnIndex: state.spawned, highest: highestValue(res.grid) }, cfg);
 
   return {
@@ -54,6 +68,7 @@ export function dropBlock(state, col, rng = Math.random, cfg) {
     steps,
     chains: res.chains,
     gameOver: status === STATUS.OVER,
+    won: status === STATUS.WON,
     state: {
       ...state,
       grid: res.grid,
@@ -72,7 +87,8 @@ export function dropBlock(state, col, rng = Math.random, cfg) {
  * Current/next blocks are not consumed.
  */
 export function bombBlock(state, col, row) {
-  if (state.status !== STATUS.PLAYING) return fail('game-over');
+  const ended = ensurePlaying(state);
+  if (ended) return ended;
   if (!Number.isInteger(col) || !Number.isInteger(row) || col < 0 || col >= COLS || row < 0 || row >= ROWS) {
     return fail('invalid-cell');
   }
@@ -85,12 +101,13 @@ export function bombBlock(state, col, row) {
   const res = resolveBoard(grid, { nextId: state.nextId });
   steps.push(...res.steps);
 
-  const status = isBoardFull(res.grid) ? STATUS.OVER : STATUS.PLAYING;
+  const status = evaluateStatus(res.grid);
   return {
     ok: true,
     steps,
     chains: res.chains,
     gameOver: status === STATUS.OVER,
+    won: status === STATUS.WON,
     state: { ...state, grid: res.grid, status, nextId: res.nextId },
   };
 }

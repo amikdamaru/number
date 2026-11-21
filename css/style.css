@@ -437,12 +437,21 @@ button:focus-visible {
 .ctrl-btn.off {
   opacity: 0.6;
 }
+/* sound button icon: waves = all on, crossed note = music off, X = all off */
 .ctrl-btn .mute,
-.ctrl-btn.off .wave {
+.ctrl-btn .note,
+.ctrl-btn .note-x,
+.ctrl-btn.off .wave,
+.ctrl-btn.no-music .wave {
   display: none;
 }
-.ctrl-btn.off .mute {
+.ctrl-btn.off .mute,
+.ctrl-btn.no-music .note,
+.ctrl-btn.no-music .note-x {
   display: inline;
+}
+.ctrl-btn .note-x {
+  stroke: var(--danger);
 }
 
 .bomb-btn {
@@ -533,6 +542,33 @@ button:focus-visible {
   color: var(--danger);
   text-shadow: 0 0 24px rgba(255, 77, 109, 0.45);
 }
+.dialog .credit {
+  margin: 16px 0 0;
+  font-size: 10.5px;
+  color: #6b7285;
+}
+
+.win-overlay {
+  background: radial-gradient(circle at 50% 40%, rgba(255, 210, 63, 0.18), rgba(6, 7, 10, 0.8) 60%);
+}
+.dialog.win {
+  border-color: rgba(255, 210, 63, 0.45);
+  box-shadow: 0 0 50px rgba(255, 210, 63, 0.2), 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+.dialog.win h2 {
+  font-size: 26px;
+  color: #ffd23f;
+  text-shadow: 0 0 24px rgba(255, 210, 63, 0.45);
+}
+.win-tile {
+  --cell: 84px;
+  --tile-bg: #ffd23f;
+  width: var(--cell);
+  height: var(--cell);
+  margin: 0 auto 18px;
+  animation: win-pop 0.7s cubic-bezier(0.2, 0.9, 0.3, 1.3), win-glow 1.8s ease-in-out 0.7s infinite;
+}
+
 .dialog-actions {
   display: flex;
   gap: 10px;
@@ -796,6 +832,27 @@ button:focus-visible {
   50% {
     transform: scale(0.6);
     opacity: 0.6;
+  }
+}
+@keyframes win-pop {
+  0% {
+    scale: 0.2;
+    rotate: -20deg;
+    opacity: 0;
+  }
+  100% {
+    scale: 1;
+    rotate: 0deg;
+    opacity: 1;
+  }
+}
+@keyframes win-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 12px 2px var(--tile-bg);
+  }
+  50% {
+    box-shadow: 0 0 34px 10px var(--tile-bg);
   }
 }
 @keyframes fade {
