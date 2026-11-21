@@ -34,9 +34,10 @@ Project ini berupa file statis biasa (HTML + CSS + JavaScript ES modules), jadi 
 
 Jalankan server lokal, lalu buka di browser:
 
-- `tests/index.html`: 64 unit test (engine, connected components, gravitasi, rumus merge, chain, bom, move, game over, menang 16K, label angka, generator berbasis rekor, save/load, fuzz 3000 langkah acak)
+- `tests/index.html`: 65 unit test (engine, connected components, gravitasi, rumus merge, chain, bom, move, game over, menang 16K, label angka, generator berbasis rekor, save/load, fuzz 3000 langkah acak)
 - `tests/ui.html`: sekitar 51 test end-to-end di aplikasi asli (input sentuh, double tap, bom, move, game over, layar menang + musik berhenti, new game, auto save, continue, file musik, layout, cache offline)
 - `tests/offline.html`: memeriksa isi cache offline service worker
+- `tests/loudness.html`: mengukur kerasnya file musik (peak/RMS) dan level akhirnya di dalam game
 - `tests/sim.html`: bot memainkan banyak game dan melaporkan berapa drop/bom yang dibutuhkan untuk menang (untuk menyetel kesulitan)
 
 Judul tab menampilkan `PASS x/y` atau `FAIL x/y`.
@@ -99,12 +100,12 @@ tests/                  Unit test & UI test
 
 ## Musik
 
-Musik latar: `audio/music.mp3` (disediakan oleh pemilik project). File diputar berulang apa adanya, termasuk jeda hening di awal/akhir file.
+Musik latar: `audio/music.mp3` (disediakan oleh pemilik project). File diputar berulang apa adanya, termasuk jeda hening di awal/akhir file. Kerasnya lagu diukur otomatis saat dimuat dan volumenya disamakan ke tingkat pelan (`targetRms` di `MusicPlayer`, `js/ui/audio.js`), sehingga efek suara selalu lebih dominan, berapa pun kerasnya file lagu. Cek level lagu dengan `tests/loudness.html`.
 
 ## Menyesuaikan
 
 - **Nilai kemenangan**: `WIN_VALUE` di `js/engine/config.js` (default 16384)
-- **Musik**: ganti `audio/music.mp3` (format MP3/OGG; jika nama file berubah, ubah juga di `js/main.js` dan `sw.js`, lalu naikkan `CACHE_VERSION`). Volume diatur lewat `volume` di `MusicPlayer` (`js/ui/audio.js`).
+- **Musik**: ganti `audio/music.mp3` (format MP3/OGG; jika nama file berubah, ubah juga di `js/main.js` dan `sw.js`, lalu naikkan `CACHE_VERSION`). Volume diatur lewat `targetRms` di `MusicPlayer` (`js/ui/audio.js`); makin kecil makin pelan.
 
 - **Probabilitas angka**: `SPAWN_CONFIG.tiers` di `js/engine/generator.js`. Peluang setiap angka mengikuti **rekor** (angka tertinggi yang pernah di-merge di game itu; tidak turun walau baloknya dibom). Semakin tinggi rekor, balok 2 dan 4 makin jarang dan balok besar makin sering. Setelah mengubah tabel, jalankan `tests/sim.html` untuk melihat efeknya.
 - **Ukuran papan**: `COLS` / `ROWS` di `js/engine/config.js` (save lama otomatis diabaikan bila ukurannya berbeda)

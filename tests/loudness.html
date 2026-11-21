@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Number Merge – loudness</title>
+    <style>
+      body { background: #111; color: #ddd; font: 13px/1.5 ui-monospace, Consolas, monospace; padding: 16px; }
+    </style>
+  </head>
+  <body>
+    <pre id="log">measuring…</pre>
+    <script type="module">
+      // Reports duration, peak and RMS loudness of audio files.
+      // ?src=a.mp3,b.mp3  (paths relative to the project root)
+      // Headless: add &hold=<slow image URL> and use --dump-dom (real time).
+      import { measureLoudness, musicGain } from '../js/ui/audio.js';
+      const params = new URLSearchParams(location.search);
+      const hold = params.get('hold');
+      if (hold) document.body.appendChild(Object.assign(new Image(), { src: hold }));
+      const srcs = (params.get('src') || 'audio/music.mp3').split(',');
+      const db = (x) => (20 * Math.log10(x)).toFixed(1) + ' dBFS';
+      const out = [];
+      for (const src of srcs) {
+        try {
+          const data = await (await fetch('../' + src)).arrayBuffer();
+          const buf = await new OfflineAudioContext(2, 44100, 44100).decodeAudioData(data);
+          const { peak, rms } = measureLoudness(buf);
+          out.push(`${src}: ${buf.duration.toFixed(1)}s  peak ${peak.toFixed(3)} (${db(peak)})  rms ${rms.toFixed(4)} (${db(rms)})  → in game: gain ${musicGain(rms).toFixed(4)}, rms ${db(rms * musicGain(rms))}`);
+        } catch (e) {
+          out.push(`${src}: FAILED ${e}`);
+        }
+      }
+      document.getElementById('log').textContent = out.join('\n');
+      document.title = 'LOUDNESS DONE';
+    </script>
+  </body>
+</html>

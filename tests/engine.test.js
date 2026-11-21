@@ -472,3 +472,16 @@ test('fuzz: 3000 random drops + bombs keep every invariant', () => {
   }
   assert(games >= 1);
 });
+
+// ---------- music level ----------
+
+test('music gain: loud and quiet tracks end up at the same soft level', async () => {
+  const { musicGain } = await import('../js/ui/audio.js');
+  const loud = musicGain(0.3191); // measured: new track
+  const quiet = musicGain(0.1766); // measured: previous track
+  assert(Math.abs(0.3191 * loud - 0.009) < 1e-9, 'loud track normalised');
+  assert(Math.abs(0.1766 * quiet - 0.009) < 1e-9, 'quiet track normalised');
+  assert(loud < quiet, 'louder file gets less gain');
+  assertEqual(musicGain(0.001), 0.3, 'very quiet file capped at maxGain');
+  assertEqual(musicGain(0), 0.05, 'silent/unknown falls back');
+});

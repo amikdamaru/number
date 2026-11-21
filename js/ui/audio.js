@@ -28,7 +28,7 @@ export class SoundFX {
         return null;
       }
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.2;
+      this.master.gain.value = 0.28; // effects sit clearly above the music
       this.master.connect(this.ctx.destination);
     }
     if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
@@ -143,10 +143,17 @@ export class SoundFX {
  * from the beginning.
  */
 export class MusicPlayer {
-  constructor(fx, url, { volume = 0.1 } = {}) {
+  /**
+   * targetRms: how loud the music plays on average (0..1). The track is
+   * measured after decoding and its gain set to reach this level, so any song
+   * – quiet or very loud – ends up equally soft behind the sound effects.
+   */
+  constructor(fx, url, { targetRms = 0.009, maxGain = 0.3 } = {}) {
     this.fx = fx;
     this.url = url;
-    this.volume = volume;
+    this.targetRms = targetRms;
+    this.maxGain = maxGain;
+    this.volume = 0.05; // replaced by the measured level once loaded
     this.held = false;
     this.buffer = null;
     this.loading = null;
@@ -175,7 +182,11 @@ export class MusicPlayer {
           return res.arrayBuffer();
         })
         .then((data) => new Promise((resolve, reject) => ctx.decodeAudioData(data, resolve, reject)))
-        .then((buf) => (this.buffer = buf))
+        .then((buf) => {
+          this.volume = musicGain(measureLoudness(buf).rms, this.targetRms, this.maxGain);
+          this.buffer = buf;
+          return buf;
+        })
         .catch((err) => {
           this.loading = null;
           throw err;
@@ -231,4 +242,27 @@ export class MusicPlayer {
       }
     }
   }
+}
+
+/** Peak and RMS level (0..1) of a decoded buffer, all channels. */
+export function measureLoudness(buf) {
+  let peak = 0;
+  let sum = 0;
+  let n = 0;
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    const data = buf.getChannelData(c);
+    for (let i = 0; i < data.length; i++) {
+      const v = Math.abs(data[i]);
+      if (v > peak) peak = v;
+      sum += v * v;
+    }
+    n += data.length;
+  }
+  return { peak, rms: n ? Math.sqrt(sum / n) : 0 };
+}
+
+/** Gain that brings a track with the given RMS to targetRms (capped). */
+export function musicGain(rms, targetRms = 0.009, maxGain = 0.3) {
+  if (!(rms > 0)) return Math.min(0.05, maxGain);
+  return Math.min(maxGain, targetRms / rms);
 }
