@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Number Merge – UI tests</title>
+    <style>
+      html, body { margin: 0; background: #111; color: #ddd; font: 12px/1.45 ui-monospace, Consolas, monospace; }
+      body { display: flex; gap: 12px; }
+      iframe { width: 412px; height: 860px; border: 0; flex: none; }
+      pre { margin: 0; padding: 12px; white-space: pre-wrap; }
+      body.shot pre { display: none; }
+    </style>
+  </head>
+  <body>
+    <iframe id="app" title="app"></iframe>
+    <pre id="log">running…</pre>
+    <script type="module">
+      // End-to-end checks: real DOM, real input events, real localStorage.
+      // ?mode=shot&scene=… only renders a scene (for screenshots).
+      import { serializeGame } from '../js/core/persistence.js';
+      import { GAME_KEY, SETTINGS_KEY } from '../js/core/storage.js';
+
+      const frame = document.getElementById('app');
+      const log = document.getElementById('log');
+      const params = new URLSearchParams(location.search);
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const lines = [];
+      let pass = 0, fail = 0;
+      const check = (name, cond, extra = '') => {
+        cond ? pass++ : fail++;
+        lines.push(`${cond ? 'PASS' : 'FAIL'}  ${name}${cond ? '' : '  ' + extra}`);
+        log.textContent = lines.join('\n') + '\n…';
+      };
+
+      function makeState(columns, current = 2, next = 4) {
+        const grid = Array.from({ length: 5 }, () => Array(7).fill(null));
+        let id = 1;
+        columns.forEach((col, c) => col.forEach((v, r) => v && (grid[c][r] = { id: id++, value: v })));
+        const full = grid.every((col) => col[6]);
+        return { grid, current, next, status: full ? 'over' : 'playing', nextId: id, spawned: 30 };
+      }
+      function seed(columns, current, next, sound = false) {
+        localStorage.setItem(GAME_KEY, JSON.stringify(serializeGame(makeState(columns, current, next))));
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify({ sound }));
+      }
+      async function load() {
+        frame.src = '../index.html?t=' + Date.now();
+        await new Promise((r) => (frame.onload = r));
+        for (let i = 0; i < 50 && !frame.contentDocument.documentElement.classList.contains('ready'); i++) await sleep(50);
+        await sleep(150);
+        return frame.contentDocument;
+      }
+      const D = () => frame.contentDocument;
+      const blocks = () => [...D().querySelectorAll('#blocks .block')];
+      const saved = () => JSON.parse(localStorage.getItem(GAME_KEY));
+
+      function tapCell(col, row = 0, opts = {}) {
+        const board = D().getElementById('board');
+        const lane = D().querySelectorAll('.lane')[col];
+        const lr = lane.getBoundingClientRect();
+        const cell = lr.width;
+        const gap = parseFloat(board.style.getPropertyValue('--gap'));
+        const x = lr.left + lr.width / 2;
+        const y = lr.bottom - (row + 0.5) * cell - row * gap;
+        board.dispatchEvent(
+          new (frame.contentWindow.PointerEvent)('pointerdown', {
+            bubbles: true, cancelable: true, clientX: x, clientY: y,
+            pointerId: opts.pointerId ?? 1, isPrimary: opts.isPrimary ?? true, pointerType: 'touch', button: 0,
+          }),
+        );
+      }
+
+      async function scenes() {
+        document.body.classList.add('shot');
+        if (params.get('w')) frame.style.width = params.get('w') + 'px';
+        if (params.get('h')) frame.style.height = params.get('h') + 'px';
+        const scene = params.get('scene') || 'play';
+        if (scene === 'play') {
+          seed([[2, 8, 32], [4, 16], [64, 2], [128, 256, 4, 2], [512, 1024, 2048]], 8, 2);
+          await load();
+        } else if (scene === 'bomb') {
+          seed([[2, 8, 32], [4, 16], [64, 2], [128, 256, 4, 2], [512, 1024]], 8, 2);
+          await load();
+          D().getElementById('btn-bomb').click();
+        } else if (scene === 'chain') {
+          seed([[], [16, 8], [8, 4], [16, 8]], 4, 2);
+          await load();
+          tapCell(2);
+          await sleep(Number(params.get('at') || 600));
+        } else if (scene === 'over') {
+          const cols = [];
+          for (let c = 0; c < 5; c++) { const col = []; for (let r = 0; r < 7; r++) col.push((c + r) % 2 ? 8 : 4); cols.push(col); }
+          seed(cols, 2, 2);
+          await load();
+        } else if (scene === 'empty') {
+          localStorage.clear();
+          await load();
+        }
+        document.title = 'SCENE ' + scene;
+      }
+
+      async function tests() {
+        // --- drop + 3-way merge + double tap guard ---
+        seed([[2], [], [2]], 2, 4);
+        await load();
+        check('board renders seeded blocks', blocks().length === 2, `got ${blocks().length}`);
+        check('current/next preview shows 2 and 4',
+          D().getElementById('current-tile').textContent === '2' && D().getElementById('next-tile').textContent === '4');
+        tapCell(1);
+        tapCell(3); // second tap during animation must be ignored
+        tapCell(4, 0, { pointerId: 2, isPrimary: false }); // second finger ignored
+        await sleep(2500);
+        const b = blocks();
+        check('3 connected 2s merge into a single 8', b.length === 1 && b[0].textContent === '8',
+          b.map((x) => x.textContent).join(','));
+        check('merged block sits in column 2 (drop position)', b[0]?.dataset.col === '1' && b[0]?.dataset.row === '0');
+        check('double tap / multi-touch produced only one drop', saved().spawned === 31, `spawned=${saved().spawned}`);
+        check('auto save stored merged board', JSON.stringify(saved().grid[1][0]?.[1]) === '8');
+        check('next became current', D().getElementById('current-tile').textContent === '4');
+
+        // --- bomb mode ---
+        D().getElementById('btn-bomb').click();
+        check('bomb mode activates', D().getElementById('board').classList.contains('bomb-mode'));
+        check('bomb button shows BATAL', D().getElementById('btn-bomb-label').textContent === 'BATAL');
+        tapCell(4, 0);
+        await sleep(300);
+        check('tap on empty cell: no drop, bomb mode stays', blocks().length === 1 &&
+          D().getElementById('board').classList.contains('bomb-mode'));
+        D().getElementById('btn-bomb').click();
+        check('tapping bomb again cancels bomb mode', !D().getElementById('board').classList.contains('bomb-mode'));
+        D().getElementById('btn-bomb').click();
+        tapCell(1, 0);
+        await sleep(1200);
+        check('bomb destroys targeted block', blocks().length === 0, `left ${blocks().length}`);
+        check('bomb mode exits after use', !D().getElementById('board').classList.contains('bomb-mode'));
+        check('bomb disabled on empty board', D().getElementById('btn-bomb').disabled === true);
+
+        // --- bomb → gravity → merge ---
+        seed([[2, 4, 8], [16, 8]], 2, 2);
+        await load();
+        D().getElementById('btn-bomb').click();
+        tapCell(0, 1);
+        await sleep(2000);
+        const vals = saved().grid.map((col) => col.filter(Boolean).map((x) => x[1]));
+        check('bomb → gravity → merge gives [[2,16],[16]]', JSON.stringify(vals.slice(0, 2)) === '[[2,16],[16]]', JSON.stringify(vals));
+        check('DOM matches saved grid', blocks().length === 3);
+
+        // --- full column ---
+        seed([[2, 4, 8, 16, 32, 64, 128]], 256, 2);
+        await load();
+        tapCell(0);
+        await sleep(600);
+        check('drop on full column is refused', blocks().length === 7 && saved().spawned === 30);
+        check('full column is flagged', D().querySelectorAll('.lane')[0].classList.contains('full'));
+
+        // --- game over + new game ---
+        const cols = [];
+        for (let c = 0; c < 5; c++) { const col = []; for (let r = 0; r < 7; r++) col.push((c + r) % 2 ? 8 : 4); cols.push(col); }
+        cols[4].pop();
+        seed(cols, 4, 2);
+        await load();
+        check('no game over before the board is full', D().getElementById('gameover').hidden);
+        tapCell(4);
+        await sleep(2500);
+        check('GAME OVER overlay appears', !D().getElementById('gameover').hidden);
+        check('bomb disabled on game over', D().getElementById('btn-bomb').disabled);
+        check('game over is saved', saved().status === 'over');
+        await load();
+        check('game over persists after reopen', !D().getElementById('gameover').hidden);
+        D().getElementById('gameover-new').click();
+        await sleep(200);
+        check('NEW GAME clears board and overlay', blocks().length === 0 && D().getElementById('gameover').hidden && saved().status === 'playing');
+
+        // --- New Game confirmation ---
+        tapCell(2);
+        await sleep(1500);
+        D().getElementById('btn-new').click();
+        check('NEW GAME asks for confirmation', !D().getElementById('confirm').hidden);
+        D().getElementById('confirm-cancel').click();
+        check('cancel keeps the board', D().getElementById('confirm').hidden && blocks().length === 1);
+        D().getElementById('btn-new').click();
+        D().getElementById('confirm-ok').click();
+        await sleep(100);
+        check('confirm resets the board', blocks().length === 0);
+
+        // --- continue game after reload ---
+        tapCell(0);
+        await sleep(1500);
+        const before = JSON.stringify(saved().grid);
+        await load();
+        check('continue game restores the board after reopening', blocks().length === 1 && JSON.stringify(saved().grid) === before);
+
+        // --- sound toggle ---
+        D().getElementById('btn-sound').click();
+        check('sound toggle saves preference', JSON.parse(localStorage.getItem(SETTINGS_KEY)).sound === true &&
+          D().getElementById('btn-sound-label').textContent === 'SUARA ON');
+        D().getElementById('btn-sound').click();
+        check('sound toggle off', JSON.parse(localStorage.getItem(SETTINGS_KEY)).sound === false);
+
+        // --- layout ---
+        const app = D().querySelector('.app');
+        check('no scrolling needed (app fits viewport)',
+          D().documentElement.scrollHeight <= frame.clientHeight && D().documentElement.scrollWidth <= frame.clientWidth);
+        const board = D().getElementById('board').getBoundingClientRect();
+        check('board fits inside viewport', board.right <= frame.clientWidth && board.bottom <= frame.clientHeight && board.width > 250);
+
+        // --- service worker ---
+        const reg = await frame.contentWindow.navigator.serviceWorker.getRegistration('./');
+        check('service worker registered', Boolean(reg));
+        let cached = [];
+        for (let i = 0; i < 60 && cached.length < 20; i++) {
+          const names = (await caches.keys()).filter((k) => k.startsWith('number-merge-'));
+          cached = names.length ? await (await caches.open(names[0])).keys() : [];
+          if (cached.length < 20) await sleep(200);
+        }
+        check('offline cache holds all app assets', cached.length >= 20, `cached ${cached.length}`);
+
+        lines.push('', `${pass} passed, ${fail} failed, ${pass + fail} total`);
+        log.textContent = lines.join('\n');
+        document.title = `${fail ? 'FAIL' : 'PASS'} ${pass}/${pass + fail}`;
+      }
+
+      (params.get('mode') === 'shot' ? scenes() : tests()).catch((e) => {
+        log.textContent = lines.join('\n') + '\nERROR ' + e.stack;
+        document.title = 'ERROR';
+      });
+    </script>
+  </body>
+</html>

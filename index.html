@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <title>Number Merge</title>
+    <meta name="description" content="Number Merge — puzzle drop & merge angka. Jatuhkan balok, gabungkan angka yang sama." />
+    <meta name="theme-color" content="#0d0e12" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Merge" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+    <link rel="stylesheet" href="css/style.css" />
+    <script type="module" src="js/main.js"></script>
+  </head>
+  <body>
+    <div class="app">
+      <header class="header">
+        <img class="logo" src="icons/icon.svg" alt="" width="34" height="34" />
+        <h1 class="title">NUMBER <span>MERGE</span></h1>
+      </header>
+
+      <section class="queue" id="queue" aria-label="Balok berikutnya">
+        <div class="queue-item current">
+          <span class="queue-label">SEKARANG</span>
+          <div class="tile preview-tile empty" id="current-tile" aria-live="polite"></div>
+        </div>
+        <svg class="queue-arrow" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <div class="queue-item next">
+          <span class="queue-label">BERIKUTNYA</span>
+          <div class="tile preview-tile small empty" id="next-tile"></div>
+        </div>
+        <div class="bomb-hint" aria-live="polite">
+          <strong>MODE BOM</strong>
+          <span>Ketuk balok yang ingin dihancurkan</span>
+        </div>
+      </section>
+
+      <main class="board-area" id="board-area">
+        <div class="board" id="board" role="application" aria-label="Papan permainan, 5 kolom. Ketuk kolom untuk menjatuhkan balok.">
+          <div class="lanes" id="lanes"></div>
+          <div class="blocks" id="blocks"></div>
+          <div class="limit-line" aria-hidden="true"><span>BATAS</span></div>
+          <div class="fx" id="fx"></div>
+        </div>
+      </main>
+
+      <nav class="controls" aria-label="Kontrol">
+        <button type="button" class="ctrl-btn" id="btn-new" aria-label="New game">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+            <path d="M20 4v5h-5" />
+          </svg>
+          <span>NEW GAME</span>
+        </button>
+
+        <button type="button" class="ctrl-btn bomb-btn" id="btn-bomb" aria-pressed="false" aria-label="Bom">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="10" cy="14" r="7" fill="currentColor" />
+            <path d="M14.6 9.4l2.1-2.1" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" />
+            <path d="M16.9 7.1c.9-1.2 2.3-1.5 3.4-.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+            <circle class="spark" cx="20.6" cy="5.4" r="1.9" fill="#ffe17a" />
+          </svg>
+          <span id="btn-bomb-label">BOM</span>
+        </button>
+
+        <button type="button" class="ctrl-btn" id="btn-sound" aria-pressed="true" aria-label="Suara">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 9.5v5h3.5L12 18V6L7.5 9.5H4z" fill="currentColor" />
+            <path class="wave" d="M15.5 9.5a3.5 3.5 0 0 1 0 5" />
+            <path class="wave" d="M18 7a7 7 0 0 1 0 10" />
+            <path class="mute" d="M16 9.5l5 5M21 9.5l-5 5" />
+          </svg>
+          <span id="btn-sound-label">SUARA ON</span>
+        </button>
+      </nav>
+    </div>
+
+    <div class="overlay" id="confirm" hidden role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+      <div class="dialog">
+        <h2 id="confirm-title">Mulai Game Baru?</h2>
+        <p>Papan saat ini akan dikosongkan dan tidak bisa dikembalikan.</p>
+        <div class="dialog-actions">
+          <button type="button" class="btn" id="confirm-cancel">BATAL</button>
+          <button type="button" class="btn primary" id="confirm-ok">NEW GAME</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="overlay" id="gameover" hidden role="dialog" aria-modal="true" aria-labelledby="gameover-title">
+      <div class="dialog gameover">
+        <h2 id="gameover-title">GAME OVER</h2>
+        <p>Papan sudah penuh sampai batas atas.</p>
+        <div class="dialog-actions">
+          <button type="button" class="btn primary" id="gameover-new">NEW GAME</button>
+        </div>
+      </div>
+    </div>
+
+    <noscript><p class="noscript">Number Merge membutuhkan JavaScript.</p></noscript>
+  </body>
+</html>
