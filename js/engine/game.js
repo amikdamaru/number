@@ -1,7 +1,8 @@
 // Game rules: drop and bomb actions. Pure functions over an immutable state.
 //
 // State shape:
-//   { grid, current, next, status, nextId, spawned }
+//   { grid, current, next, status, nextId, spawned, best }
+//   best = highest value merged so far this game (drives spawn odds).
 
 import { COLS, ROWS, STATUS, WIN_VALUE } from './config.js';
 import {
@@ -15,6 +16,16 @@ import {
 import { generateValue } from './generator.js';
 
 const fail = (reason) => ({ ok: false, reason });
+
+/** Record after a resolution: the largest merge result so far, never decreasing. */
+function nextBest(prev, steps) {
+  let best = prev || 0;
+  for (const st of steps) {
+    if (st.type !== 'merge') continue;
+    for (const m of st.merges) if (m.block.value > best) best = m.block.value;
+  }
+  return best;
+}
 
 /** Win (a block ≥ WIN_VALUE exists) beats game over (board full). */
 export function evaluateStatus(grid) {
@@ -32,11 +43,12 @@ function ensurePlaying(state) {
 export function createGame(rng = Math.random, cfg) {
   return {
     grid: createEmptyGrid(),
-    current: generateValue(rng, { spawnIndex: 0, highest: 0 }, cfg),
-    next: generateValue(rng, { spawnIndex: 1, highest: 0 }, cfg),
+    current: generateValue(rng, { best: 0 }, cfg),
+    next: generateValue(rng, { best: 0 }, cfg),
     status: STATUS.PLAYING,
     nextId: 1,
     spawned: 2,
+    best: 0,
   };
 }
 
@@ -61,7 +73,8 @@ export function dropBlock(state, col, rng = Math.random, cfg) {
   steps.push(...res.steps);
 
   const status = evaluateStatus(res.grid);
-  const next = generateValue(rng, { spawnIndex: state.spawned, highest: highestValue(res.grid) }, cfg);
+  const best = nextBest(state.best, res.steps);
+  const next = generateValue(rng, { best }, cfg);
 
   return {
     ok: true,
@@ -77,6 +90,7 @@ export function dropBlock(state, col, rng = Math.random, cfg) {
       status,
       nextId: res.nextId,
       spawned: state.spawned + 1,
+      best,
     },
   };
 }
@@ -108,6 +122,6 @@ export function bombBlock(state, col, row) {
     chains: res.chains,
     gameOver: status === STATUS.OVER,
     won: status === STATUS.WON,
-    state: { ...state, grid: res.grid, status, nextId: res.nextId },
+    state: { ...state, grid: res.grid, status, nextId: res.nextId, best: nextBest(state.best, res.steps) },
   };
 }

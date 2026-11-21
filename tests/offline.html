@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Number Merge – offline cache check</title>
+    <style>
+      body { background: #111; color: #ddd; font: 13px/1.5 ui-monospace, Consolas, monospace; padding: 16px; }
+    </style>
+  </head>
+  <body>
+    <pre id="log">waiting for service worker…</pre>
+    <script type="module">
+      // Registers the service worker and reports what it cached.
+      // Headless Chrome: add ?hold=<slow image URL> to keep the page loading
+      // (real time) while the worker installs, then use --dump-dom.
+      const hold = new URLSearchParams(location.search).get('hold');
+      if (hold) document.body.appendChild(Object.assign(new Image(), { src: hold }));
+      const log = document.getElementById('log');
+      await navigator.serviceWorker.register('../sw.js');
+      for (let i = 0; i < 100; i++) {
+        const names = (await caches.keys()).filter((k) => k.startsWith('number-merge-'));
+        const lines = [];
+        for (const n of names) {
+          const keys = await (await caches.open(n)).keys();
+          const music = keys.some((r) => r.url.endsWith('/audio/music.ogg'));
+          lines.push(`${n}: ${keys.length} files, music: ${music ? 'yes' : 'no'}`);
+        }
+        log.textContent = lines.join('\n') || 'no cache yet…';
+        if (lines.some((l) => / (2\d|[3-9]\d) files, music: yes/.test(l))) {
+          document.title = 'PASS offline cache';
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 200));
+      }
+    </script>
+  </body>
+</html>

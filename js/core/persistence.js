@@ -2,7 +2,7 @@
 // save can never put an invalid board on screen.
 
 import { COLS, ROWS, STATE_VERSION } from '../engine/config.js';
-import { applyGravity } from '../engine/board.js';
+import { applyGravity, highestValue } from '../engine/board.js';
 import { evaluateStatus } from '../engine/game.js';
 
 export function isValidValue(v) {
@@ -18,6 +18,7 @@ export function serializeGame(state) {
     status: state.status,
     nextId: state.nextId,
     spawned: state.spawned,
+    best: state.best || 0,
   };
 }
 
@@ -55,6 +56,8 @@ export function deserializeGame(data) {
     status: evaluateStatus(compact),
     nextId: Number.isSafeInteger(data.nextId) && data.nextId > maxId ? data.nextId : maxId + 1,
     spawned: Number.isSafeInteger(data.spawned) && data.spawned >= 0 ? data.spawned : 2,
+    // Older saves have no record: fall back to the highest block on the board.
+    best: Math.max(isValidValue(data.best) ? data.best : 0, highestValue(compact)),
   };
 }
 

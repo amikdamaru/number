@@ -151,6 +151,18 @@ test('won game: input locked, bomb unavailable, restored as won', () => {
   assertEqual(ctl.game.status, STATUS.PLAYING);
 });
 
+test('record (best) is saved and restored; old saves derive it from the board', () => {
+  const { storage, backend, ctl } = setup();
+  seedBoard(ctl, [[256], [], [2]], 256);
+  ctl.drop(1);
+  assertEqual(ctl.game.best, 512);
+  assertEqual(new GameController({ storage }).game.best, 512);
+  const old = JSON.parse(backend.getItem(GAME_KEY));
+  delete old.best;
+  const legacy = deserializeGame(old);
+  assertEqual(legacy.best, 512, 'legacy save uses highest block on board');
+});
+
 test('corrupted save falls back to a fresh game', () => {
   for (const bad of ['{not json', '{"v":1,"grid":[]}', JSON.stringify({ v: 1, grid: [[[1, 3]]] })]) {
     const backend = createMemoryBackend({ [GAME_KEY]: bad });

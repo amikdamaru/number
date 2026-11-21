@@ -10,7 +10,7 @@ import {
   landingRow,
 } from '../js/engine/board.js';
 import { createGame, dropBlock, bombBlock } from '../js/engine/game.js';
-import { generateValue, spawnTable, seededRng, SPAWN_CONFIG } from '../js/engine/generator.js';
+import { generateValue, spawnTable, spawnTier, spawnOdds, seededRng } from '../js/engine/generator.js';
 import { formatValue } from '../js/ui/tiles.js';
 
 // ---------- helpers ----------
@@ -340,26 +340,46 @@ test('labels: full number up to 8192, then 16K 32K … 512K, 1M …', () => {
 
 // ---------- generator ----------
 
-test('generator: opening spawns are only 2 and 4', () => {
+test('generator: start of the game spawns only 2 and 4', () => {
   const r = seededRng(7);
   for (let i = 0; i < 500; i++) {
-    const v = generateValue(r, { spawnIndex: i % SPAWN_CONFIG.openingSpawns, highest: 0 });
+    const v = generateValue(r, { best: 0 });
     assert(v === 2 || v === 4, `got ${v}`);
   }
 });
 
-test('generator: max spawn grows with the highest block, and small values dominate', () => {
-  const tbl = spawnTable({ spawnIndex: 100, highest: 64 });
-  assertEqual(tbl.map(([v]) => v), [2, 4, 8]);
-  const big = spawnTable({ spawnIndex: 100, highest: 1 << 20 });
-  assert(big[big.length - 1][0] <= SPAWN_CONFIG.maxMaxSpawn);
-  const r = seededRng(3);
-  const counts = {};
-  for (let i = 0; i < 5000; i++) {
-    const v = generateValue(r, { spawnIndex: 100, highest: 4096 });
-    counts[v] = (counts[v] || 0) + 1;
+test('generator: as the record grows, 2 gets rarer and big blocks more common', () => {
+  const records = [0, 32, 128, 256, 512, 1024, 2048, 4096, 8192];
+  const odds = records.map((best) => spawnOdds({ best }));
+  for (let i = 1; i < odds.length; i++) {
+    assert(odds[i][2] < odds[i - 1][2], `P(2) must drop at best=${records[i]}`);
+    const big = (o) => Object.entries(o).filter(([v]) => Number(v) >= 16).reduce((s, [, p]) => s + p, 0);
+    assert(big(odds[i]) >= big(odds[i - 1]), `P(≥16) must not drop at best=${records[i]}`);
   }
-  assert(counts[2] > counts[8] && counts[8] > counts[64], JSON.stringify(counts));
+  // Example from the request: after merging 1024, 2 is much rarer than at start.
+  assert(spawnOdds({ best: 1024 })[2] < 0.1, 'P(2) at 1024 should be < 10%');
+});
+
+test('generator: tier is chosen by the record, values in between use the lower tier', () => {
+  assertEqual(spawnTier(1000).from, 512);
+  assertEqual(spawnTier(1024).from, 1024);
+  assertEqual(spawnTier(1 << 20).from, 8192);
+  const max = Math.max(...spawnTable({ best: 1 << 20 }).map(([v]) => v));
+  assert(max <= 512, 'spawns never exceed 512');
+  const r = seededRng(3);
+  for (let i = 0; i < 2000; i++) {
+    const v = generateValue(r, { best: 1024 });
+    assert(v <= 128, `best=1024 spawned ${v}`);
+  }
+});
+
+test('record (best) follows merges and never decreases, even after a bomb', () => {
+  let s = stateFrom([[512], [], [2]], 512);
+  s = dropBlock(s, 1, rng).state; // 512 + 512 → 1024
+  assertEqual(s.best, 1024);
+  s = bombBlock(s, 1, 0).state; // destroy the 1024
+  assertEqual(s.best, 1024, 'record kept after bomb');
+  assert(spawnTable({ best: s.best }).some(([v]) => v === 128), 'high tier still active');
 });
 
 test('createGame starts empty and playing', () => {

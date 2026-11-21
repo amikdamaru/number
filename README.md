@@ -34,8 +34,10 @@ Project ini berupa file statis biasa (HTML + CSS + JavaScript ES modules), jadi 
 
 Jalankan server lokal, lalu buka di browser:
 
-- `tests/index.html`: 52 unit test (engine, connected components, gravitasi, rumus merge, chain, bom, game over, menang 16K, label angka, generator, save/load, siklus suara/musik, fuzz 3000 langkah acak)
-- `tests/ui.html`: 44 test end-to-end di aplikasi asli (input sentuh, double tap, bom, game over, layar menang, new game, auto save, continue, siklus tombol suara, file musik, layout, cache offline)
+- `tests/index.html`: 55 unit test (engine, connected components, gravitasi, rumus merge, chain, bom, game over, menang 16K, label angka, generator berbasis rekor, save/load, siklus suara/musik, fuzz 3000 langkah acak)
+- `tests/ui.html`: 43–44 test end-to-end di aplikasi asli (input sentuh, double tap, bom, game over, layar menang, new game, auto save, continue, siklus tombol suara, file musik, layout, cache offline)
+- `tests/offline.html`: memeriksa isi cache offline service worker
+- `tests/sim.html`: bot memainkan banyak game dan melaporkan berapa drop/bom yang dibutuhkan untuk menang (untuk menyetel kesulitan)
 
 Judul tab menampilkan `PASS x/y` atau `FAIL x/y`.
 
@@ -107,7 +109,7 @@ File disimpan sebagai `audio/music.ogg` tanpa diubah. Kredit juga ditampilkan di
 - **Nilai kemenangan**: `WIN_VALUE` di `js/engine/config.js` (default 16384)
 - **Musik**: ganti `audio/music.ogg` (format OGG/MP3; jika nama file berubah, ubah juga di `js/main.js` dan `sw.js`). Volume diatur lewat `volume` di `MusicPlayer` (`js/ui/audio.js`).
 
-- **Probabilitas angka**: `SPAWN_CONFIG` di `js/engine/generator.js` (bobot pembuka, bobot normal, batas angka maksimum yang muncul relatif terhadap balok tertinggi)
+- **Probabilitas angka**: `SPAWN_CONFIG.tiers` di `js/engine/generator.js`. Peluang setiap angka mengikuti **rekor** (angka tertinggi yang pernah di-merge di game itu; tidak turun walau baloknya dibom). Semakin tinggi rekor, balok 2 dan 4 makin jarang dan balok besar makin sering. Setelah mengubah tabel, jalankan `tests/sim.html` untuk melihat efeknya.
 - **Ukuran papan**: `COLS` / `ROWS` di `js/engine/config.js` (save lama otomatis diabaikan bila ukurannya berbeda)
 - **Warna balok**: `PALETTE` di `js/ui/tiles.js`
 - **Suara/musik default**: `DEFAULT_SETTINGS` di `js/core/controller.js`

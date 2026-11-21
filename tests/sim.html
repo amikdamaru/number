@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Number Merge – difficulty simulation</title>
+    <style>
+      body { background: #111; color: #ddd; font: 13px/1.5 ui-monospace, Consolas, monospace; padding: 16px; }
+    </style>
+  </head>
+  <body>
+    <pre id="log">running…</pre>
+    <script type="module">
+      // Greedy bot plays many seeded games and reports how many drops it
+      // needs to reach the win value. Used to tune SPAWN_CONFIG.
+      // ?games=30&cap=6000
+      import { COLS, STATUS, WIN_VALUE } from '../js/engine/config.js';
+      import { landingRow, countBlocks } from '../js/engine/board.js';
+      import { createGame, dropBlock, bombBlock } from '../js/engine/game.js';
+      import { seededRng } from '../js/engine/generator.js';
+
+      const params = new URLSearchParams(location.search);
+      const GAMES = Number(params.get('games') || 30);
+      const CAP = Number(params.get('cap') || 6000);
+
+      function score(res) {
+        let s = 0;
+        for (const st of res.steps) {
+          if (st.type === 'merge') for (const m of st.merges) s += m.block.value * m.count;
+        }
+        return s - countBlocks(res.state.grid) * 2;
+      }
+
+      function playOne(seed) {
+        const rng = seededRng(seed);
+        let s = createGame(rng);
+        let drops = 0;
+        let bombs = 0;
+        while (drops < CAP) {
+          if (s.status === STATUS.WON) return { won: true, drops, bombs };
+          const open = [];
+          for (let c = 0; c < COLS; c++) if (landingRow(s.grid, c) !== -1) open.push(c);
+          // Keep room: bomb the smallest block when the board gets crowded.
+          if (open.length <= 1 || countBlocks(s.grid) >= 28) {
+            let best = null;
+            s.grid.forEach((col, c) => col.forEach((b, r) => {
+              if (b && (!best || b.value < best.v)) best = { c, r, v: b.value };
+            }));
+            s = bombBlock(s, best.c, best.r).state;
+            bombs++;
+            continue;
+          }
+          let pick = null;
+          for (const c of open) {
+            const res = dropBlock(s, c, () => 0.5);
+            const sc = score(res) - landingRow(s.grid, c);
+            if (!pick || sc > pick.sc) pick = { c, sc };
+          }
+          s = dropBlock(s, pick.c, rng).state;
+          drops++;
+        }
+        return { won: false, drops, bombs };
+      }
+
+      const results = [];
+      for (let i = 1; i <= GAMES; i++) results.push(playOne(i * 7919));
+      const wins = results.filter((r) => r.won);
+      const sorted = wins.map((r) => r.drops).sort((a, b) => a - b);
+      const median = sorted.length ? sorted[Math.floor(sorted.length / 2)] : '-';
+      const avgBombs = wins.length ? Math.round(wins.reduce((n, r) => n + r.bombs, 0) / wins.length) : '-';
+      const text = [
+        `win value: ${WIN_VALUE}, games: ${GAMES}, drop cap: ${CAP}`,
+        `reached win: ${wins.length}/${GAMES}`,
+        `drops to win – median: ${median}, min: ${sorted[0] ?? '-'}, max: ${sorted[sorted.length - 1] ?? '-'}`,
+        `bombs used (avg, winners): ${avgBombs}`,
+      ].join('\n');
+      document.getElementById('log').textContent = text;
+      document.title = 'SIM DONE';
+    </script>
+  </body>
+</html>
