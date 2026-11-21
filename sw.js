@@ -1,7 +1,7 @@
 // Service worker: precaches the whole app so it runs fully offline.
 // Bump CACHE_VERSION whenever you deploy changed files.
 
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 const CACHE_NAME = `number-merge-${CACHE_VERSION}`;
 
 const ASSETS = [
@@ -25,7 +25,7 @@ const ASSETS = [
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',
   './icons/apple-touch-icon.png',
-  './audio/music.ogg',
+  './audio/music.mp3',
 ];
 
 self.addEventListener('install', (event) => {
@@ -55,10 +55,12 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (req.mode === 'navigate') {
-    // App shell: serve cached index.html instantly, works offline.
-    event.respondWith(
-      caches.match('./index.html').then((cached) => cached || fetch(req)),
-    );
+    // App shell for the game's own page only ("./" or "./index.html", with
+    // any query string). Other pages (e.g. tests/) go to the network.
+    const scope = new URL(self.registration.scope);
+    const isApp = url.pathname === scope.pathname || url.pathname === `${scope.pathname}index.html`;
+    if (!isApp) return;
+    event.respondWith(caches.match('./index.html').then((cached) => cached || fetch(req)));
     return;
   }
 

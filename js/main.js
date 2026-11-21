@@ -34,7 +34,7 @@ const ui = {
 
 const controller = new GameController({ storage: createStorage(getLocalStorage()) });
 const sound = new SoundFX(controller.settings.sound);
-const music = new MusicPlayer(sound, 'audio/music.ogg');
+const music = new MusicPlayer(sound, 'audio/music.mp3');
 music.enabled = controller.settings.music; // starts on the first tap
 const renderer = new Renderer({
   area: ui.area,

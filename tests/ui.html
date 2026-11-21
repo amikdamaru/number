@@ -19,6 +19,7 @@
       // ?mode=shot&scene=… only renders a scene (for screenshots).
       import { serializeGame } from '../js/core/persistence.js';
       import { GAME_KEY, SETTINGS_KEY } from '../js/core/storage.js';
+      import { findLoopPoints } from '../js/ui/audio.js';
 
       const frame = document.getElementById('app');
       const log = document.getElementById('log');
@@ -211,8 +212,23 @@
         check('tap 2 → music off', audio() === 'true/false/MUSIK OFF', audio());
         D().getElementById('btn-sound').click();
         check('tap 3 → all off', audio() === 'false/false/SUARA OFF', audio());
-        const musicRes = await fetch('../audio/music.ogg');
-        check('music file is served', musicRes.ok && (await musicRes.arrayBuffer()).byteLength > 1000000);
+        const musicRes = await fetch('../audio/music.mp3');
+        const musicData = musicRes.ok ? await musicRes.arrayBuffer() : new ArrayBuffer(0);
+        check('music file is served', musicData.byteLength > 1000000);
+        try {
+          const off = new OfflineAudioContext(2, 44100, 44100);
+          const buf = await Promise.race([off.decodeAudioData(musicData), sleep(4000).then(() => 'timeout')]);
+          if (buf === 'timeout') {
+            lines.push('SKIP  music decode (stalls under headless virtual time) – verify with tests/offline.html');
+          } else {
+            const lp = findLoopPoints(buf);
+            lines.push(`INFO  music: ${buf.duration.toFixed(2)}s, loop ${lp.start.toFixed(3)}s → ${lp.end.toFixed(3)}s`);
+            check('music decodes and loop points are sane',
+              buf.duration > 5 && lp.start >= 0 && lp.start < 1 && lp.end > buf.duration - 1 && lp.end <= buf.duration);
+          }
+        } catch (e) {
+          check('music decodes and loop points are sane', false, String(e));
+        }
 
         // --- win ---
         seed([[8192], [], [2]], 8192, 2);
@@ -242,7 +258,7 @@
         const reg = await frame.contentWindow.navigator.serviceWorker.getRegistration('./');
         check('service worker registered', Boolean(reg));
         let cached = [];
-        const hasMusic = () => cached.some((r) => r.url.endsWith('/audio/music.ogg'));
+        const hasMusic = () => cached.some((r) => r.url.endsWith('/audio/music.mp3'));
         const withTimeout = (p, ms) => Promise.race([p, sleep(ms).then(() => 'timeout')]);
         let timedOut = false;
         for (let i = 0; i < 60 && !(cached.length >= 21 && hasMusic()); i++) {

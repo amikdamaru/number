@@ -91,23 +91,20 @@ js/ui/                  Tampilan
   renderer.js           Render balok & animasi (drop, merge, chain, gravitasi, ledakan)
   tiles.js              Warna & label per angka
   audio.js              Efek suara sintetis + pemutar musik loop (Web Audio)
-audio/music.ogg         Musik latar (CC BY 4.0, lihat Kredit musik)
+audio/music.mp3         Musik latar
 icons/                  Ikon aplikasi (SVG + PNG 192/512/maskable)
 tools/generate-icons.ps1  Generator ikon PNG
 tests/                  Unit test & UI test
 ```
 
-## Kredit musik
+## Musik
 
-**“Winter Village [Loop]”** oleh **Visager**, dari album *Songs From An Unmade World 2*.
-Lisensi: [Creative Commons Attribution 4.0 (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/).
-Sumber: [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Visager_-_25_-_Winter_Village_Loop.ogg) / [Free Music Archive](https://freemusicarchive.org/music/Visager/).
-File disimpan sebagai `audio/music.ogg` tanpa diubah. Kredit juga ditampilkan di dialog New Game, Game Over, dan Menang.
+Musik latar: `audio/music.mp3` (disediakan oleh pemilik project). Pemutar otomatis melewati jeda hening di awal/akhir file MP3 agar loop mulus.
 
 ## Menyesuaikan
 
 - **Nilai kemenangan**: `WIN_VALUE` di `js/engine/config.js` (default 16384)
-- **Musik**: ganti `audio/music.ogg` (format OGG/MP3; jika nama file berubah, ubah juga di `js/main.js` dan `sw.js`). Volume diatur lewat `volume` di `MusicPlayer` (`js/ui/audio.js`).
+- **Musik**: ganti `audio/music.mp3` (format MP3/OGG; jika nama file berubah, ubah juga di `js/main.js` dan `sw.js`, lalu naikkan `CACHE_VERSION`). Volume diatur lewat `volume` di `MusicPlayer` (`js/ui/audio.js`).
 
 - **Probabilitas angka**: `SPAWN_CONFIG.tiers` di `js/engine/generator.js`. Peluang setiap angka mengikuti **rekor** (angka tertinggi yang pernah di-merge di game itu; tidak turun walau baloknya dibom). Semakin tinggi rekor, balok 2 dan 4 makin jarang dan balok besar makin sering. Setelah mengubah tabel, jalankan `tests/sim.html` untuk melihat efeknya.
 - **Ukuran papan**: `COLS` / `ROWS` di `js/engine/config.js` (save lama otomatis diabaikan bila ukurannya berbeda)

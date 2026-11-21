@@ -164,7 +164,11 @@ export class MusicPlayer {
           return res.arrayBuffer();
         })
         .then((data) => new Promise((resolve, reject) => ctx.decodeAudioData(data, resolve, reject)))
-        .then((buf) => (this.buffer = buf))
+        .then((buf) => {
+          this.buffer = buf;
+          this.loopPoints = findLoopPoints(buf);
+          return buf;
+        })
         .catch((err) => {
           this.loading = null;
           throw err;
@@ -188,8 +192,11 @@ export class MusicPlayer {
       const src = ctx.createBufferSource();
       src.buffer = buf;
       src.loop = true;
+      const { start, end } = this.loopPoints || { start: 0, end: buf.duration };
+      src.loopStart = start;
+      src.loopEnd = end;
       src.connect(gain);
-      src.start();
+      src.start(0, start);
       this.source = src;
       this.gain = gain;
     } catch (err) {
@@ -220,4 +227,21 @@ export class MusicPlayer {
       }
     }
   }
+}
+
+/**
+ * MP3 files carry encoder padding (near-silence) at both ends, which makes a
+ * looped track stutter. Returns loop points (seconds) that skip that silence.
+ */
+export function findLoopPoints(buf, threshold = 0.002) {
+  const data = buf.getChannelData(0);
+  const ch2 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : data;
+  const loud = (i) => Math.abs(data[i]) > threshold || Math.abs(ch2[i]) > threshold;
+  let a = 0;
+  while (a < data.length && !loud(a)) a++;
+  let b = data.length - 1;
+  while (b > a && !loud(b)) b--;
+  // Fall back to the whole buffer if trimming would leave almost nothing.
+  if (b - a < buf.sampleRate) return { start: 0, end: buf.duration };
+  return { start: a / buf.sampleRate, end: (b + 1) / buf.sampleRate };
 }

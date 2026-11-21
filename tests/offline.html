@@ -15,19 +15,32 @@
       // (real time) while the worker installs, then use --dump-dom.
       const hold = new URLSearchParams(location.search).get('hold');
       if (hold) document.body.appendChild(Object.assign(new Image(), { src: hold }));
+      import { findLoopPoints } from '../js/ui/audio.js';
       const log = document.getElementById('log');
+
+      // Music must decode in this browser; report the trimmed loop points.
+      let musicInfo = 'music: not checked';
+      try {
+        const data = await (await fetch('../audio/music.mp3')).arrayBuffer();
+        const buf = await new OfflineAudioContext(2, 44100, 44100).decodeAudioData(data);
+        const lp = findLoopPoints(buf);
+        musicInfo = `music: decodes OK, ${buf.duration.toFixed(2)}s, ${buf.numberOfChannels}ch, loop ${lp.start.toFixed(3)}s → ${lp.end.toFixed(3)}s`;
+      } catch (e) {
+        musicInfo = `music: DECODE FAILED ${e}`;
+      }
+
       await navigator.serviceWorker.register('../sw.js');
       for (let i = 0; i < 100; i++) {
         const names = (await caches.keys()).filter((k) => k.startsWith('number-merge-'));
         const lines = [];
         for (const n of names) {
           const keys = await (await caches.open(n)).keys();
-          const music = keys.some((r) => r.url.endsWith('/audio/music.ogg'));
+          const music = keys.some((r) => r.url.endsWith('/audio/music.mp3'));
           lines.push(`${n}: ${keys.length} files, music: ${music ? 'yes' : 'no'}`);
         }
-        log.textContent = lines.join('\n') || 'no cache yet…';
+        log.textContent = [musicInfo, ...lines].join('\n') || 'no cache yet…';
         if (lines.some((l) => / (2\d|[3-9]\d) files, music: yes/.test(l))) {
-          document.title = 'PASS offline cache';
+          document.title = musicInfo.includes('decodes OK') ? 'PASS offline cache + music' : 'FAIL music decode';
           break;
         }
         await new Promise((r) => setTimeout(r, 200));
