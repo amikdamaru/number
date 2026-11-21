@@ -229,17 +229,33 @@ export class Renderer {
     await wait(this.t(50));
   }
 
-  /** Picked block flies from the top of one column to the top of another. */
-  async animMove({ block, to }, onLand = () => {}) {
+  /**
+   * Picked block rises out of its column (leaving the board at the top),
+   * then falls from the top into the target column like a normal drop.
+   */
+  async animMove({ block, from, to }, onLand = () => {}) {
     const el = this.els.get(block.id);
     if (!el) return;
     el.classList.remove('picked');
     el.style.zIndex = '4';
-    const dur = this.t(300);
-    this.place(el, to.col, to.row, `translate ${dur}ms cubic-bezier(.45,0,.35,1)`);
-    await wait(dur);
+
+    // 1. rise out of the source column, above the board edge (clipped there)
+    const rise = this.t(120 + 30 * (ROWS - from.row));
+    this.place(el, from.col, ROWS, `translate ${rise}ms cubic-bezier(.3,0,.6,.4)`);
+    await wait(rise);
+
+    // 2. jump (hidden above the board) to the top of the target column
+    const top = this.pos(to.col, ROWS);
+    el.style.transition = 'none';
+    el.style.translate = `${top.x}px ${top.y}px`;
+    void el.offsetWidth;
+
+    // 3. fall into place with the same gravity curve as a drop
+    const fall = this.t(110 + 42 * (ROWS - to.row));
+    this.place(el, to.col, to.row, `translate ${fall}ms ${FALL}`);
+    await wait(fall);
     el.style.zIndex = '';
-    onLand();
+    onLand(); // collision
     bump(el, 'land');
     await wait(this.t(60));
   }

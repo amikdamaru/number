@@ -27,7 +27,7 @@ Project ini berupa file statis biasa (HTML + CSS + JavaScript ES modules), jadi 
 - **Ketuk kolom**: jatuhkan balok "Sekarang"
 - **BOM**: masuk mode bom, lalu ketuk satu balok untuk menghancurkannya. Ketuk BOM lagi (BATAL) untuk membatalkan.
 - **NEW GAME**: mulai ulang (dengan konfirmasi)
-- **MOVE**: ketuk MOVE, ketuk kolom asal (balok paling atasnya terangkat), lalu ketuk kolom tujuan. Ketuk kolom asal lagi untuk batal pilih, atau ketuk MOVE (BATAL) untuk keluar. Balok yang dipindah bisa langsung merge/chain.
+- **MOVE**: ketuk MOVE, ketuk kolom asal (balok paling atasnya terangkat), lalu ketuk kolom tujuan: balok naik keluar dari papan lalu jatuh dari atas ke kolom tujuan. Ketuk kolom asal lagi untuk batal pilih, atau ketuk MOVE (BATAL) untuk keluar. Balok yang dipindah bisa langsung merge/chain.
 - Keyboard (desktop): `1`–`5` drop / pilih kolom, `B` bom, `M` move, `Esc` batal
 
 ## Testing

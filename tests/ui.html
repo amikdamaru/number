@@ -241,8 +241,31 @@
         await sleep(200);
         check("tapping column 1 picks its top block (4)", D().querySelector(".block.picked")?.textContent === "4");
         check("valid destination columns are highlighted", D().querySelectorAll(".lane.target").length === 4);
+        // Record every position the moved block takes during the animation.
+        const movedEl = D().querySelector(".block.picked");
+        const path = [];
+        // Each record carries the style *before* the change, so positions set
+        // and replaced within one tick are not lost.
+        const tr = (styleText) => (/translate:\s*([^;]+)/.exec(styleText || "") || [])[1]?.trim();
+        const push = (t) => t && path[path.length - 1] !== t && path.push(t);
+        const obs = new frame.contentWindow.MutationObserver((records) => {
+          for (const r of records) push(tr(r.oldValue));
+          push(movedEl.style.translate);
+        });
+        obs.observe(movedEl, { attributes: true, attributeFilter: ["style"], attributeOldValue: true });
+        const xy = (t) => t.split(" ").map(parseFloat);
+        const x0 = xy(movedEl.style.translate)[0];
         tapCell(1);
         await sleep(1500);
+        obs.disconnect();
+        const pts = path.map(xy);
+        const xTarget = pts[pts.length - 1][0];
+        const iRise = pts.findIndex(([x, y]) => x === x0 && y < 0);
+        const iAbove = pts.findIndex(([x, y]) => x === xTarget && y < 0);
+        const last = pts[pts.length - 1];
+        check("move animation: rises out of the source column above the board", iRise >= 0, JSON.stringify(path));
+        check("move animation: then falls from above into the target column",
+          iAbove > iRise && last[1] > 0 && xTarget !== x0, JSON.stringify(path));
         const mv = saved().grid.map((col) => col.filter(Boolean).map((x) => x[1]));
         check("block moved to column 2", JSON.stringify(mv.slice(0, 3)) === "[[2],[4],[16]]", JSON.stringify(mv));
         check("move mode ends after moving", !board2().classList.contains("move-mode") && !D().querySelector(".block.picked"));
